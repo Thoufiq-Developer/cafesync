@@ -4,7 +4,7 @@ import { SharedAppLayout } from '@/components/shared/layout-wrapper';
 import { BrandsList } from '@/components/master/brands-list';
 import { createClient } from '@/lib/supabase/server';
 import { isSupabaseConfigured } from '@/lib/supabase/config';
-import { getAuthEmailMap } from '@/lib/supabase/user-emails';
+import { getAuthEmailMap } from '@cafesync/shared/server-admin';
 import { getCurrentMonthKolkata, getMonthBounds } from '@/lib/calculations/dates';
 import { DEMO_MASTER_BRANDS, DemoMasterBrand } from '@/lib/demo-master-data';
 import { listAllBrandThemes } from '@/lib/theme/server';

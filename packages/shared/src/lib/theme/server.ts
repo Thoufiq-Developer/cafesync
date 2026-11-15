@@ -4,7 +4,6 @@ import { unstable_cache, revalidatePath, revalidateTag } from 'next/cache';
 import { cookies } from 'next/headers';
 import { createClient as createSupabaseJsClient } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase/server';
-import { createAdminClient } from '@/lib/supabase/admin';
 import { isSupabaseConfigured } from '@/lib/supabase/config';
 import { DEMO_BRAND } from '@/lib/demo-data';
 import { buildDefaultBrandSettings, slugifyBrandName } from './presets';
@@ -107,11 +106,7 @@ async function fetchBrandThemeFromDb(
 
   let db: any = dbOverride || null;
   if (!db) {
-    if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      db = createAdminClient();
-    } else {
-      db = createStatelessAnonClient();
-    }
+    db = createStatelessAnonClient();
   }
   if (!db) return null;
 
@@ -313,11 +308,7 @@ export async function listAllBrandThemes(): Promise<BrandThemeBundle[]> {
   }
 
   try {
-    const db = (
-      process.env.SUPABASE_SERVICE_ROLE_KEY
-        ? createAdminClient()
-        : await createClient()
-    ) as any;
+    const db = (await createClient()) as any;
     const { data: brands } = await db
       .from('brands')
       .select('id, name, slug, registration_no, logo_url, primary_color, secondary_color, address, phone, email, gstin, status')

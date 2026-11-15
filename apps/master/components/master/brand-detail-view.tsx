@@ -363,7 +363,8 @@ export function BrandDetailView({
               className="h-7 px-2.5 text-[11px]"
               onClick={() => {
                 const slug = currentBrand.slug || slugifyBrandName(currentBrand.name);
-                navigator.clipboard.writeText(`${window.location.origin}/login/${slug}`);
+                const origin = process.env.NEXT_PUBLIC_ADMIN_APP_URL || (typeof window !== 'undefined' ? window.location.origin : '');
+                navigator.clipboard.writeText(`${origin}/login/${slug}`);
                 toast.success('Brand login link copied!');
               }}
             >
@@ -371,7 +372,7 @@ export function BrandDetailView({
               Copy URL
             </Button>
             <Link
-              href={`/login/${currentBrand.slug || slugifyBrandName(currentBrand.name)}`}
+              href={`${process.env.NEXT_PUBLIC_ADMIN_APP_URL || ''}/login/${currentBrand.slug || slugifyBrandName(currentBrand.name)}`}
               target="_blank"
               className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-100"
             >

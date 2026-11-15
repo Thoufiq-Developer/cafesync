@@ -6,7 +6,7 @@
 // ==============================================================================
 
 import { getCurrentUserContext } from '@/lib/auth';
-import { tryGetAdminClient } from '@/lib/supabase/admin';
+import { tryGetAdminClient } from '@cafesync/shared/server-admin';
 import { createClient } from '@/lib/supabase/server';
 import {
   generateReadablePassword,

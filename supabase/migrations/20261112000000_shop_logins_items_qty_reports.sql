@@ -28,7 +28,16 @@ alter table public.items
   add column if not exists created_by uuid references auth.users(id) on delete set null;
 
 alter table public.items
-  add column if not exists unit text not null default 'pcs';
+  add column if not exists unit text default 'pcs';
+
+-- Normalize existing null or non-standard units to prevent constraint failure
+update public.items
+  set unit = 'pcs'
+  where unit is null or unit not in ('L', 'kg', 'g', 'ml', 'pcs', 'packet', 'dozen', 'box', 'other');
+
+alter table public.items
+  alter column unit set default 'pcs',
+  alter column unit set not null;
 
 alter table public.items
   drop constraint if exists items_unit_check;
@@ -121,6 +130,11 @@ alter table public.transactions
 
 alter table public.transactions
   add column if not exists rate numeric(12,2);
+
+-- Normalize non-positive legacy quantities to prevent check constraint failure
+update public.transactions
+  set quantity = null
+  where quantity is not null and quantity <= 0;
 
 alter table public.transactions
   drop constraint if exists transactions_quantity_check;
@@ -321,6 +335,67 @@ begin
   order by ds.summary_date asc;
 end;
 $$;
+
+-- ------------------------------------------------------------------------------
+-- 5.1. RPC: Safe Public Brand Login Lookup (Idempotent Guard)
+-- ------------------------------------------------------------------------------
+create or replace function public.get_public_brand_login(p_slug text)
+returns table (
+  brand_id uuid,
+  brand_name text,
+  slug text,
+  status text,
+  display_name text,
+  tagline text,
+  welcome_message text,
+  logo_url text,
+  logo_dark_url text,
+  icon_url text,
+  login_bg_url text,
+  login_bg_color text,
+  primary_color text,
+  secondary_color text,
+  accent_color text,
+  font_family text,
+  radius text,
+  default_mode text,
+  login_layout text,
+  login_logo_size text
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select
+    b.id as brand_id,
+    b.name as brand_name,
+    b.slug,
+    b.status,
+    coalesce(bs.display_name, b.name) as display_name,
+    bs.tagline,
+    bs.welcome_message,
+    coalesce(bs.logo_url, b.logo_url) as logo_url,
+    bs.logo_dark_url,
+    bs.icon_url,
+    bs.login_bg_url,
+    bs.login_bg_color,
+    coalesce(bs.primary_color, b.primary_color, '#ea580c') as primary_color,
+    coalesce(bs.secondary_color, b.secondary_color, '#9a3412') as secondary_color,
+    coalesce(bs.accent_color, '#f59e0b') as accent_color,
+    coalesce(bs.font_family, 'Inter') as font_family,
+    coalesce(bs.radius, 'rounded') as radius,
+    coalesce(bs.default_mode, 'light') as default_mode,
+    coalesce(bs.login_layout, 'split') as login_layout,
+    coalesce(bs.login_logo_size, 'md') as login_logo_size
+  from public.brands b
+  left join public.brand_settings bs on bs.brand_id = b.id
+  where b.slug = lower(trim(p_slug))
+  limit 1;
+$$;
+
+revoke all on function public.get_public_brand_login(text) from public;
+grant execute on function public.get_public_brand_login(text) to anon, authenticated, service_role;
 
 -- ------------------------------------------------------------------------------
 -- 6. GRANTS & AUDIT LOG RLS ENHANCEMENTS (IDEMPOTENT)

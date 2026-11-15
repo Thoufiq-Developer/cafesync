@@ -231,7 +231,8 @@ export function BrandsList({ initialBrands }: BrandsListProps) {
                 <button
                   type="button"
                   onClick={() => {
-                    const url = `${window.location.origin}/login/${brand.slug || slugifyBrandName(brand.name)}`;
+                    const origin = process.env.NEXT_PUBLIC_ADMIN_APP_URL || (typeof window !== 'undefined' ? window.location.origin : '');
+                    const url = `${origin}/login/${brand.slug || slugifyBrandName(brand.name)}`;
                     navigator.clipboard.writeText(url);
                     toast.success('Brand login link copied!');
                   }}

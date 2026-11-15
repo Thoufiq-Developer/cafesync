@@ -1,7 +1,7 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
-import { createAdminClient } from '@/lib/supabase/admin';
+import { createAdminClient } from '@cafesync/shared/server-admin';
 import { isSupabaseConfigured } from '@/lib/supabase/config';
 import { getCurrentUserContext } from '@/lib/auth';
 import { revalidatePath } from 'next/cache';
@@ -503,6 +503,69 @@ export async function toggleBrandStatusAction(brandId: string, status: 'active' 
 
     revalidateBrandThemeCache(brandId, updatedBrand?.slug);
     revalidatePath('/master');
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+export async function deleteBrandAction(brandId: string): Promise<ActionResult> {
+  const user = await getCurrentUserContext();
+  if (!user || user.role !== 'master') {
+    return { success: false, error: 'Unauthorized.' };
+  }
+
+  try {
+    const adminSupabase = createAdminClient() as any;
+    if (!adminSupabase) {
+      return { success: false, error: 'SUPABASE_SERVICE_ROLE_KEY is required to delete a brand and its user accounts.' };
+    }
+
+    // 1. Find all admin and manager profiles belonging to this brand
+    const { data: brandProfiles } = await adminSupabase
+      .from('profiles')
+      .select('id')
+      .eq('brand_id', brandId);
+
+    // 2. Delete all auth user accounts for this brand
+    if (brandProfiles && brandProfiles.length > 0) {
+      for (const p of brandProfiles) {
+        await adminSupabase.auth.admin.deleteUser(p.id).catch(() => null);
+      }
+    }
+
+    // 3. Delete brand assets from storage bucket
+    try {
+      const { data: files } = await adminSupabase.storage.from('brand-assets').list(brandId);
+      if (files && files.length > 0) {
+        const filePaths = files.map((f: any) => `${brandId}/${f.name}`);
+        await adminSupabase.storage.from('brand-assets').remove(filePaths);
+      }
+    } catch (storageErr) {
+      console.warn('Storage cleanup warning:', storageErr);
+    }
+
+    // 4. Delete the brand (cascades to all child tables in Postgres)
+    const { error: brandErr } = await adminSupabase
+      .from('brands')
+      .delete()
+      .eq('id', brandId);
+
+    if (brandErr) {
+      return { success: false, error: brandErr.message };
+    }
+
+    // 5. Audit log
+    await adminSupabase.from('audit_log').insert({
+      user_id: user.id,
+      action: 'DELETE',
+      table_name: 'brands',
+      record_id: brandId,
+      new_data: { deleted_brand_id: brandId, cleaned_users_count: brandProfiles?.length || 0 },
+    });
+
+    revalidatePath('/master');
+    revalidatePath('/master/brands');
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err.message };

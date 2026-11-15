@@ -17,6 +17,7 @@ import {
   CalendarCheck,
   Building2,
   UploadCloud,
+  Archive,
   LogOut,
   PanelLeftClose,
   PanelLeftOpen,
@@ -114,6 +115,7 @@ export function SharedSidebar({
     { title: 'Master Dashboard', href: '/master', icon: Layers },
     { title: 'Brand Portfolios', href: '/master/brands', icon: Building2 },
     { title: 'Platform Audit Log', href: '/master/audit', icon: History },
+    { title: 'Backup & Restore', href: '/master/backup', icon: Archive },
     { title: 'Master Settings', href: '/master/settings', icon: Settings },
   ];
 

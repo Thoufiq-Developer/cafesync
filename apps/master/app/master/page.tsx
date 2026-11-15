@@ -4,7 +4,7 @@ import { SharedAppLayout } from '@/components/shared/layout-wrapper';
 import { MasterDashboardView } from '@/components/master/master-dashboard-view';
 import { createClient } from '@/lib/supabase/server';
 import { isSupabaseConfigured } from '@/lib/supabase/config';
-import { getAuthEmailMap } from '@/lib/supabase/user-emails';
+import { getAuthEmailMap } from '@cafesync/shared/server-admin';
 import { getCurrentMonthKolkata, getMonthBounds } from '@/lib/calculations/dates';
 import { DEMO_MASTER_BRANDS, DemoMasterBrand } from '@/lib/demo-master-data';
 import { listAllBrandThemes } from '@/lib/theme/server';
@@ -20,6 +20,7 @@ export default async function MasterDashboardPage() {
 
   let brands: DemoMasterBrand[] = [];
   let totalUsersCount: number | null = null;
+  let needsBackupReminder = false;
 
   if (!isSupabaseConfigured()) {
     const demoById = new Map(DEMO_MASTER_BRANDS.map((b) => [b.id, b]));
@@ -56,6 +57,7 @@ export default async function MasterDashboardPage() {
         { data: dbBrands, error: brandsErr },
         { data: dbSummaries },
         { count: activeUsersCount },
+        { data: latestBackup },
       ] = await Promise.all([
         getAuthEmailMap(),
         supabase
@@ -72,7 +74,24 @@ export default async function MasterDashboardPage() {
           .select('id', { count: 'exact', head: true })
           .in('role', ['admin', 'manager'])
           .eq('is_active', true),
+        supabase
+          .from('backup_log')
+          .select('created_at')
+          .eq('scope', 'all')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
       ]);
+
+      if (!latestBackup || !latestBackup.created_at) {
+        needsBackupReminder = true;
+      } else {
+        const lastBackupTime = new Date(latestBackup.created_at).getTime();
+        const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+        if (Date.now() - lastBackupTime > sevenDaysMs) {
+          needsBackupReminder = true;
+        }
+      }
 
       if (typeof activeUsersCount === 'number') {
         totalUsersCount = activeUsersCount;
@@ -160,6 +179,7 @@ export default async function MasterDashboardPage() {
     <SharedAppLayout user={masterUser}>
       <MasterDashboardView
         brands={brands}
+        needsBackupReminder={needsBackupReminder}
         metrics={{
           totalBrands,
           activeBrands,

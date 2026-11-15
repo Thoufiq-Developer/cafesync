@@ -30,11 +30,13 @@ interface MasterDashboardViewProps {
     totalMonthlyVolume: number;
   };
   recentAuditLogs?: DemoGlobalAuditLog[];
+  needsBackupReminder?: boolean;
 }
 
 export function MasterDashboardView({
   brands,
   metrics,
+  needsBackupReminder,
 }: MasterDashboardViewProps) {
   return (
     <div className="space-y-6">
@@ -59,6 +61,24 @@ export function MasterDashboardView({
           </Link>
         </div>
       </div>
+
+      {/* 1.1 BACKUP REMINDER BANNER */}
+      {needsBackupReminder && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50/90 p-4 text-amber-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center gap-3">
+            <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0" />
+            <div>
+              <p className="font-semibold text-sm">Backup Reminder: No full platform backup has been taken in the last 7 days.</p>
+              <p className="text-xs text-amber-700 mt-0.5">Regular disaster recovery archives safeguard tenant ledgers, configurations, and employee records.</p>
+            </div>
+          </div>
+          <Link href="/master/backup" className="shrink-0">
+            <Button size="sm" className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold shadow-xs">
+              Run Backup Now
+            </Button>
+          </Link>
+        </div>
+      )}
 
       {/* 2. STATS OVERVIEW */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

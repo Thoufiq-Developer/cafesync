@@ -4,7 +4,7 @@ import { SharedAppLayout } from '@/components/shared/layout-wrapper';
 import { UsersManager, ManagerUserRecord } from '@/components/admin/users-manager';
 import { createClient } from '@/lib/supabase/server';
 import { isSupabaseConfigured } from '@/lib/supabase/config';
-import { getAuthEmailMap } from '@/lib/supabase/user-emails';
+import { getAuthEmailMap } from '@cafesync/shared/server-admin';
 import { DEMO_ADMIN_SHOPS, DemoShop } from '@/lib/demo-admin-data';
 import { redirect } from 'next/navigation';
 

@@ -1,7 +1,7 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
-import { tryGetAdminClient } from '@/lib/supabase/admin';
+import { tryGetAdminClient } from '@cafesync/shared/server-admin';
 import { isSupabaseConfigured } from '@/lib/supabase/config';
 import { getCurrentUserContext } from '@/lib/auth';
 import {
@@ -160,6 +160,7 @@ export async function toggleShopStatusAction(shopId: string, status: 'active' | 
 
   try {
     const supabase = (await createClient()) as any;
+    const adminSupabase = tryGetAdminClient() as any;
 
     const { error } = await supabase
       .from('shops')
@@ -169,12 +170,21 @@ export async function toggleShopStatusAction(shopId: string, status: 'active' | 
 
     if (error) return { success: false, error: error.message };
 
+    // Update active status on all manager profiles assigned to this shop
+    const isActive = status === 'active';
+    const profileDb = adminSupabase || supabase;
+    await profileDb
+      .from('profiles')
+      .update({ is_active: isActive, updated_at: new Date().toISOString() })
+      .eq('shop_id', shopId)
+      .eq('brand_id', user.brandId);
+
     await supabase.from('audit_log').insert({
       user_id: user.id,
       action: 'UPDATE',
       table_name: 'shops',
       record_id: shopId,
-      new_data: { status },
+      new_data: { status, cascade_managers_active: isActive },
     } as any);
 
     revalidatePath('/admin');
@@ -193,6 +203,7 @@ export async function deleteShopAction(shopId: string): Promise<ActionResult> {
 
   try {
     const supabase = (await createClient()) as any;
+    const adminSupabase = tryGetAdminClient() as any;
 
     // Check if shop has transactions
     const { count, error: countErr } = await supabase
@@ -209,6 +220,12 @@ export async function deleteShopAction(shopId: string): Promise<ActionResult> {
       };
     }
 
+    // Find any manager profiles assigned to this shop before deletion
+    const { data: managers } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('shop_id', shopId);
+
     const { error } = await supabase
       .from('shops')
       .delete()
@@ -216,6 +233,13 @@ export async function deleteShopAction(shopId: string): Promise<ActionResult> {
       .eq('brand_id', user.brandId);
 
     if (error) return { success: false, error: error.message };
+
+    // Delete manager auth accounts to prevent orphaned logins
+    if (adminSupabase && managers && managers.length > 0) {
+      for (const mgr of managers) {
+        await adminSupabase.auth.admin.deleteUser(mgr.id).catch(() => null);
+      }
+    }
 
     await supabase.from('audit_log').insert({
       user_id: user.id,

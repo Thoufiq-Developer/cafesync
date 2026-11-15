@@ -72,7 +72,7 @@ export function AdminSettingsView({ brand, shops }: AdminSettingsViewProps) {
 
   const handleDownloadBackup = async () => {
     setIsBackupLoading(true);
-    const toastId = toast.loading('Exporting complete brand database to multi-sheet Excel...');
+    const toastId = toast.loading('Exporting complete brand backup archive (ZIP)...');
     try {
       const response = await fetch('/api/admin/backup');
       if (!response.ok) {
@@ -83,8 +83,13 @@ export function AdminSettingsView({ brand, shops }: AdminSettingsViewProps) {
       const downloadUrl = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = downloadUrl;
-      const nowStr = new Date().toISOString().split('T')[0];
-      a.download = `CafeLedger_Full_Backup_${brand.name.replace(/\s+/g, '_')}_${nowStr}.xlsx`;
+      const contentDisposition = response.headers.get('Content-Disposition');
+      let downloadFilename = `CafeSync-Backup_${brand.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.zip`;
+      if (contentDisposition) {
+        const match = contentDisposition.match(/filename="?([^"]+)"?/);
+        if (match && match[1]) downloadFilename = match[1];
+      }
+      a.download = downloadFilename;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -94,7 +99,7 @@ export function AdminSettingsView({ brand, shops }: AdminSettingsViewProps) {
       setLastBackupDate(now);
       localStorage.setItem('cafeledger_last_backup_date', now);
 
-      toast.success('Full multi-table database backup downloaded successfully', { id: toastId });
+      toast.success('Full multi-table database backup archive downloaded successfully', { id: toastId });
     } catch (err: any) {
       toast.error(err.message || 'Backup export failed', { id: toastId });
     } finally {

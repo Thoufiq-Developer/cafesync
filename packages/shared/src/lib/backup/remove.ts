@@ -4,7 +4,21 @@
 // All database changes execute within master-only SQL RPC transactions
 // ==============================================================================
 
-import { deleteAuthUsersAction, deleteBrandStorageAssetsAction } from '@/app/master/backup/actions';
+async function getMasterBackupActions() {
+  try {
+    // @ts-ignore - Dynamically loaded in master app context
+    const actions = await import('@/app/master/backup/actions');
+    return {
+      deleteAuthUsersAction: actions.deleteAuthUsersAction,
+      deleteBrandStorageAssetsAction: actions.deleteBrandStorageAssetsAction,
+    };
+  } catch {
+    return {
+      deleteAuthUsersAction: null,
+      deleteBrandStorageAssetsAction: null,
+    };
+  }
+}
 
 export type RemovalScope = 'undo_upload' | 'remove_month' | 'remove_shop' | 'remove_brand';
 
@@ -143,6 +157,7 @@ export async function executeRemoval(
   onProgress?: (step: string, pct: number) => void
 ): Promise<RemovalExecutionResult> {
   onProgress?.('Verifying master privileges and database locks...', 10);
+  const { deleteAuthUsersAction, deleteBrandStorageAssetsAction } = await getMasterBackupActions();
 
   let targetName = 'Target Data';
   let deletedCounts: Record<string, number> = {};
@@ -188,8 +203,10 @@ export async function executeRemoval(
     const managerIds: string[] = data?.manager_user_ids || [];
     if (managerIds.length > 0) {
       onProgress?.(`Deleting ${managerIds.length} manager authentication logins...`, 75);
-      const authRes = await deleteAuthUsersAction(managerIds);
-      authUsersDeleted = authRes.count || 0;
+      if (deleteAuthUsersAction) {
+        const authRes = await deleteAuthUsersAction(managerIds);
+        authUsersDeleted = authRes.count || 0;
+      }
     }
   } else if (scope === 'remove_brand') {
     onProgress?.('Deleting brand portfolios, configurations, and tenant data...', 30);
@@ -206,15 +223,19 @@ export async function executeRemoval(
     const userIds: string[] = data?.user_ids || [];
     if (userIds.length > 0) {
       onProgress?.(`Deleting ${userIds.length} administrator & manager logins from auth...`, 70);
-      const authRes = await deleteAuthUsersAction(userIds);
-      authUsersDeleted = authRes.count || 0;
+      if (deleteAuthUsersAction) {
+        const authRes = await deleteAuthUsersAction(userIds);
+        authUsersDeleted = authRes.count || 0;
+      }
     }
 
     // Delete brand assets from storage
     if (data?.brand_slug || params.brandSlug) {
       onProgress?.('Cleaning up brand logo and favicon storage files...', 85);
-      const storageRes = await deleteBrandStorageAssetsAction(data?.brand_slug || params.brandSlug || '');
-      storageCleaned = storageRes.success;
+      if (deleteBrandStorageAssetsAction) {
+        const storageRes = await deleteBrandStorageAssetsAction(data?.brand_slug || params.brandSlug || '');
+        storageCleaned = storageRes.success;
+      }
     }
   }
 

@@ -45,7 +45,8 @@ export function CredentialsCardModal({
   if (!credentials) return null;
 
   const origin =
-    typeof window !== 'undefined' ? window.location.origin : '';
+    process.env.NEXT_PUBLIC_SHOP_APP_URL ||
+    (typeof window !== 'undefined' ? window.location.origin : '');
   const fullLoginUrl = credentials.loginPath.startsWith('http')
     ? credentials.loginPath
     : `${origin}${credentials.loginPath}`;
