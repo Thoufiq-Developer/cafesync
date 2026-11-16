@@ -1,13 +1,13 @@
 import 'server-only';
 import { cache } from 'react';
-import { tryGetAdminClient } from './admin';
+import { createClient } from './server';
 import { isSupabaseConfigured } from './config';
 
 /**
- * Fetches a userId -> email lookup map via Supabase Auth Admin API.
+ * Fetches a userId -> email lookup map via scoped RPC `get_auth_user_emails()`.
  * Deduplicated per request via React cache().
- * Used by Master and Brand Admin server pages because `public.profiles`
- * intentionally stores profile attributes without duplicating auth.users.email.
+ * Allows Master and Brand Admin pages to access user emails without exposing
+ * or requiring the Supabase Service Role Key.
  */
 export const getAuthEmailMap = cache(async (): Promise<Map<string, string>> => {
   const emailMap = new Map<string, string>();
@@ -16,23 +16,18 @@ export const getAuthEmailMap = cache(async (): Promise<Map<string, string>> => {
   }
 
   try {
-    const adminSupabase = tryGetAdminClient();
-    if (!adminSupabase) return emailMap;
+    const supabase = (await createClient()) as any;
+    const { data, error } = await supabase.rpc('get_auth_user_emails');
 
-    const { data, error } = await adminSupabase.auth.admin.listUsers({
-      page: 1,
-      perPage: 1000,
-    });
-
-    if (!error && data?.users) {
-      for (const u of data.users) {
-        if (u.id && u.email) {
-          emailMap.set(u.id, u.email);
+    if (!error && Array.isArray(data)) {
+      for (const row of data) {
+        if (row.user_id && row.email) {
+          emailMap.set(row.user_id, row.email);
         }
       }
     }
   } catch (err) {
-    console.warn('Unable to load auth user emails:', err);
+    console.warn('Unable to load auth user emails via RPC:', err);
   }
 
   return emailMap;

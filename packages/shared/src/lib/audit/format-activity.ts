@@ -340,3 +340,6 @@ export function formatActivityEntry(
     bucket: getActivityBucket(raw.at),
   };
 }
+
+export const formatAuditRow = formatActivityEntry;
+

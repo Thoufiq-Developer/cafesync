@@ -1,12 +1,12 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  transpilePackages: ["@cafesync/shared"],
-  experimental: {
-    serverActions: {
-      bodySizeLimit: '4mb',
-    },
+  output: 'export',
+  images: {
+    unoptimized: true,
   },
+  trailingSlash: true,
+  transpilePackages: ["@cafesync/shared"],
   turbopack: {
     rules: {
       "*.css": {
@@ -18,4 +18,3 @@ const nextConfig: NextConfig = {
 };
 
 export default nextConfig;
-

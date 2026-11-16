@@ -1,80 +1,66 @@
+'use client';
+
 import React from 'react';
-import { getCurrentUserContext } from '@/lib/auth';
+import { useQuery } from '@tanstack/react-query';
+import { useAuth } from '@/lib/auth-context';
+import { supabase } from '@/lib/supabase/client';
 import { SharedAppLayout } from '@/components/shared/layout-wrapper';
 import { MasterDashboardView } from '@/components/master/master-dashboard-view';
-import { createClient } from '@/lib/supabase/server';
-import { isSupabaseConfigured } from '@/lib/supabase/config';
-import { getAuthEmailMap } from '@cafesync/shared/server-admin';
 import { getCurrentMonthKolkata, getMonthBounds } from '@/lib/calculations/dates';
 import { DEMO_MASTER_BRANDS, DemoMasterBrand } from '@/lib/demo-master-data';
-import { listAllBrandThemes } from '@/lib/theme/server';
-import { redirect } from 'next/navigation';
+import { Loader2 } from 'lucide-react';
 
-export const dynamic = 'force-dynamic';
+export default function MasterDashboardPage() {
+  const { profile, isLive } = useAuth();
 
-export default async function MasterDashboardPage() {
-  const user = await getCurrentUserContext();
-  if (!user || user.role !== 'master') {
-    redirect('/login');
-  }
+  const { data, isLoading } = useQuery({
+    queryKey: ['master-dashboard', isLive],
+    queryFn: async () => {
+      if (!isLive) {
+        const totalBrands = DEMO_MASTER_BRANDS.length;
+        const activeBrands = DEMO_MASTER_BRANDS.filter((b) => b.status === 'active').length;
+        const suspendedBrands = DEMO_MASTER_BRANDS.filter((b) => b.status === 'suspended').length;
+        const totalShops = DEMO_MASTER_BRANDS.reduce((acc, b) => acc + b.shops_count, 0);
+        const totalUsers = DEMO_MASTER_BRANDS.reduce((acc, b) => acc + b.admins_count + b.shops_count, 0);
+        const totalMonthlyVolume = DEMO_MASTER_BRANDS.reduce((acc, b) => acc + b.monthly_volume, 0);
 
-  let brands: DemoMasterBrand[] = [];
-  let totalUsersCount: number | null = null;
-  let needsBackupReminder = false;
+        return {
+          brands: DEMO_MASTER_BRANDS,
+          metrics: {
+            totalBrands,
+            activeBrands,
+            suspendedBrands,
+            totalShops,
+            totalUsers,
+            totalMonthlyVolume,
+          },
+          needsBackupReminder: false,
+        };
+      }
 
-  if (!isSupabaseConfigured()) {
-    const demoById = new Map(DEMO_MASTER_BRANDS.map((b) => [b.id, b]));
-    const bundles = await listAllBrandThemes();
-    brands = bundles.map((bundle) => {
-      const base = demoById.get(bundle.brand.id);
-      return {
-        id: bundle.brand.id,
-        name: bundle.brand.name,
-        slug: bundle.brand.slug,
-        registration_no: bundle.brand.registration_no,
-        logo_url: bundle.settings.logo_url,
-        primary_color: bundle.settings.primary_color,
-        secondary_color: bundle.settings.secondary_color,
-        address: bundle.brand.address || '',
-        phone: bundle.brand.phone || '',
-        email: bundle.brand.email || '',
-        gstin: bundle.brand.gstin,
-        status: bundle.brand.status,
-        created_at: base?.created_at || new Date().toISOString(),
-        shops_count: base?.shops_count || 0,
-        admins_count: base?.admins_count || 1,
-        monthly_volume: base?.monthly_volume || 0,
-        admins: base?.admins || [],
-      };
-    });
-  } else {
-    try {
-      const supabase = (await createClient()) as any;
       const monthBounds = getMonthBounds(getCurrentMonthKolkata());
 
       const [
-        emailMap,
         { data: dbBrands, error: brandsErr },
         { data: dbSummaries },
         { count: activeUsersCount },
         { data: latestBackup },
       ] = await Promise.all([
-        getAuthEmailMap(),
-        supabase
+        (supabase as any)
           .from('brands')
-          .select('*, shops(id), profiles(id, full_name, phone, role, is_active), brand_settings(logo_url, primary_color, secondary_color)')
+          .select('*, shops(id), profiles(id, full_name, username, email, phone, role, is_active), brand_settings(logo_url, primary_color, secondary_color)')
           .order('created_at', { ascending: false }),
-        supabase
+        (supabase as any)
           .from('daily_summary')
           .select('shop_id, income')
           .gte('summary_date', monthBounds.start)
           .lte('summary_date', monthBounds.end),
-        supabase
+        (supabase as any)
           .from('profiles')
           .select('id', { count: 'exact', head: true })
           .in('role', ['admin', 'manager'])
           .eq('is_active', true),
-        supabase
+        (supabase as any)
           .from('backup_log')
           .select('created_at')
           .eq('scope', 'all')
@@ -83,6 +69,11 @@ export default async function MasterDashboardPage() {
           .maybeSingle(),
       ]);
 
+      if (brandsErr) {
+        console.error('Master dashboard brands query failed:', brandsErr);
+      }
+
+      let needsBackupReminder = false;
       if (!latestBackup || !latestBackup.created_at) {
         needsBackupReminder = true;
       } else {
@@ -93,16 +84,7 @@ export default async function MasterDashboardPage() {
         }
       }
 
-      if (typeof activeUsersCount === 'number') {
-        totalUsersCount = activeUsersCount;
-      }
-
-      if (brandsErr) {
-        console.error('Master dashboard brands query failed:', brandsErr);
-      }
-
       const shopToBrandMap = new Map<string, string>();
-
       (dbBrands || []).forEach((b: any) => {
         const brandShops = Array.isArray(b.shops) ? b.shops : [];
         brandShops.forEach((s: any) => {
@@ -120,7 +102,7 @@ export default async function MasterDashboardPage() {
         );
       });
 
-      brands = (dbBrands || []).map((b: any) => {
+      const brands: DemoMasterBrand[] = (dbBrands || []).map((b: any) => {
         const brandShops = Array.isArray(b.shops) ? b.shops : [];
         const brandProfiles = Array.isArray(b.profiles) ? b.profiles : [];
         const admins = brandProfiles.filter((p: any) => p.role === 'admin');
@@ -146,49 +128,60 @@ export default async function MasterDashboardPage() {
           admins: admins.map((a: any) => ({
             id: a.id,
             full_name: a.full_name,
-            email: emailMap.get(a.id) || '',
+            email: a.email || (a.username ? `${a.username}@${b.slug}.cafesync.app` : ''),
             phone: a.phone || '',
             is_active: a.is_active,
           })),
         };
       });
-    } catch (err) {
-      console.error('Master dashboard load error:', err);
-    }
-  }
 
-  // Calculate Metrics
-  const totalBrands = brands.length;
-  const activeBrands = brands.filter((b) => b.status === 'active').length;
-  const suspendedBrands = brands.filter((b) => b.status === 'suspended').length;
-  const totalShops = brands.reduce((acc, b) => acc + b.shops_count, 0);
-  const totalUsers =
-    totalUsersCount !== null
-      ? totalUsersCount
-      : brands.reduce((acc, b) => acc + b.admins_count + b.shops_count, 0);
-  const totalMonthlyVolume = brands.reduce((acc, b) => acc + b.monthly_volume, 0);
+      const totalBrands = brands.length;
+      const activeBrands = brands.filter((b) => b.status === 'active').length;
+      const suspendedBrands = brands.filter((b) => b.status === 'suspended').length;
+      const totalShops = brands.reduce((acc, b) => acc + b.shops_count, 0);
+      const totalUsers =
+        typeof activeUsersCount === 'number'
+          ? activeUsersCount
+          : brands.reduce((acc, b) => acc + b.admins_count + b.shops_count, 0);
+      const totalMonthlyVolume = brands.reduce((acc, b) => acc + b.monthly_volume, 0);
 
-  const masterUser = {
-    fullName: user.fullName || 'Platform Master',
-    email: user.email || '',
-    phone: user.phone,
-    role: 'master' as const,
-  };
-
-  return (
-    <SharedAppLayout user={masterUser}>
-      <MasterDashboardView
-        brands={brands}
-        needsBackupReminder={needsBackupReminder}
-        metrics={{
+      return {
+        brands,
+        metrics: {
           totalBrands,
           activeBrands,
           suspendedBrands,
           totalShops,
           totalUsers,
           totalMonthlyVolume,
-        }}
-      />
+        },
+        needsBackupReminder,
+      };
+    },
+  });
+
+  const masterUser = {
+    id: profile?.id,
+    fullName: profile?.full_name || 'Platform Master',
+    email: profile?.email || '',
+    phone: profile?.phone || '',
+    role: 'master' as const,
+  };
+
+  return (
+    <SharedAppLayout user={masterUser}>
+      {isLoading || !data ? (
+        <div className="py-20 flex flex-col items-center justify-center gap-3 text-[#B9A58A] text-xs">
+          <Loader2 className="h-8 w-8 animate-spin text-[#C68846]" />
+          <span>Loading platform administration dashboard...</span>
+        </div>
+      ) : (
+        <MasterDashboardView
+          brands={data.brands}
+          needsBackupReminder={data.needsBackupReminder}
+          metrics={data.metrics}
+        />
+      )}
     </SharedAppLayout>
   );
 }

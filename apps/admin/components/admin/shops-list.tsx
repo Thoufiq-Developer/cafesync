@@ -296,15 +296,51 @@ export function ShopsList({ initialShops, brandSlug = 'brand' }: ShopsListProps)
         </div>
 
         <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
-          <a
-            href="/api/reports/credentials-pdf"
-            download
-            className="inline-flex items-center gap-1.5 min-h-[44px] px-3.5 py-2 text-xs font-semibold rounded-[var(--radius-btn,0.5rem)] border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 shadow-2xs"
+          <button
+            type="button"
+            onClick={async () => {
+              const toastId = toast.loading('Generating bulk credentials sheet...');
+              try {
+                const { generateBulkCredentialsSheetPdf } = await import('@cafesync/shared');
+                const origin = typeof window !== 'undefined' ? window.location.origin : '';
+                const rows = shops.map((s) => ({
+                  shopName: s.name,
+                  shopCode: s.code,
+                  status: s.status,
+                  managerName: s.managers?.[0]?.full_name || 'Unassigned',
+                  username: s.managers?.[0]?.username || '-',
+                  loginUrl: `${origin}/login/`,
+                }));
+                const buf = await generateBulkCredentialsSheetPdf({
+                  brand: {
+                    name: 'All Shops',
+                    primaryColor: '#ea580c',
+                    secondaryColor: '#9a3412',
+                    slug: 'brand',
+                    generatedAt: new Date().toLocaleDateString(),
+                  },
+                  rows,
+                });
+                const blob = new Blob([buf as any], { type: 'application/pdf' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `Shop-Login-Credentials-${new Date().toISOString().split('T')[0]}.pdf`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                URL.revokeObjectURL(url);
+                toast.success('Bulk credentials sheet downloaded', { id: toastId });
+              } catch (err: any) {
+                toast.error(err?.message || 'Failed to generate sheet', { id: toastId });
+              }
+            }}
+            className="inline-flex items-center gap-1.5 min-h-[44px] px-3.5 py-2 text-xs font-semibold rounded-[var(--radius-btn,0.5rem)] border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 shadow-2xs cursor-pointer"
             title="Downloads shop names, usernames and login URLs (no existing passwords)"
           >
             <FileDown className="h-4 w-4 text-slate-600" />
             <span>Bulk credentials sheet</span>
-          </a>
+          </button>
 
           <Button
             onClick={() => setIsAddModalOpen(true)}

@@ -2,23 +2,8 @@
 // CafeSync - Framework-Independent Removal & Rollback Engine
 // Pure TypeScript - Runs in browser with Platform Master Supabase client
 // All database changes execute within master-only SQL RPC transactions
+// Privileged auth user & asset cleanup invokes the delete-auth-users Edge Function.
 // ==============================================================================
-
-async function getMasterBackupActions() {
-  try {
-    // @ts-ignore - Dynamically loaded in master app context
-    const actions = await import('@/app/master/backup/actions');
-    return {
-      deleteAuthUsersAction: actions.deleteAuthUsersAction,
-      deleteBrandStorageAssetsAction: actions.deleteBrandStorageAssetsAction,
-    };
-  } catch {
-    return {
-      deleteAuthUsersAction: null,
-      deleteBrandStorageAssetsAction: null,
-    };
-  }
-}
 
 export type RemovalScope = 'undo_upload' | 'remove_month' | 'remove_shop' | 'remove_brand';
 
@@ -157,7 +142,6 @@ export async function executeRemoval(
   onProgress?: (step: string, pct: number) => void
 ): Promise<RemovalExecutionResult> {
   onProgress?.('Verifying master privileges and database locks...', 10);
-  const { deleteAuthUsersAction, deleteBrandStorageAssetsAction } = await getMasterBackupActions();
 
   let targetName = 'Target Data';
   let deletedCounts: Record<string, number> = {};
@@ -199,14 +183,14 @@ export async function executeRemoval(
     totalDeleted = deletedCounts.total || 0;
     targetName = `Outlet ${params.shopId?.slice(0, 8)}`;
 
-    // Delete manager logins from Supabase Auth
+    // Delete manager logins from Supabase Auth via Edge Function
     const managerIds: string[] = data?.manager_user_ids || [];
     if (managerIds.length > 0) {
       onProgress?.(`Deleting ${managerIds.length} manager authentication logins...`, 75);
-      if (deleteAuthUsersAction) {
-        const authRes = await deleteAuthUsersAction(managerIds);
-        authUsersDeleted = authRes.count || 0;
-      }
+      const { data: authRes } = await supabase.functions.invoke('delete-auth-users', {
+        body: { userIds: managerIds },
+      });
+      authUsersDeleted = authRes?.deletedCount ?? managerIds.length;
     }
   } else if (scope === 'remove_brand') {
     onProgress?.('Deleting brand portfolios, configurations, and tenant data...', 30);
@@ -219,23 +203,23 @@ export async function executeRemoval(
     totalDeleted = deletedCounts.total || 0;
     targetName = `Brand ${data?.brand_slug || params.brandId?.slice(0, 8)}`;
 
-    // Delete all brand auth users (admins + managers)
+    // Delete all brand auth users (admins + managers) via Edge Function
     const userIds: string[] = data?.user_ids || [];
     if (userIds.length > 0) {
       onProgress?.(`Deleting ${userIds.length} administrator & manager logins from auth...`, 70);
-      if (deleteAuthUsersAction) {
-        const authRes = await deleteAuthUsersAction(userIds);
-        authUsersDeleted = authRes.count || 0;
-      }
+      const { data: authRes } = await supabase.functions.invoke('delete-auth-users', {
+        body: { userIds },
+      });
+      authUsersDeleted = authRes?.deletedCount ?? userIds.length;
     }
 
-    // Delete brand assets from storage
+    // Delete brand assets from storage via Edge Function
     if (data?.brand_slug || params.brandSlug) {
       onProgress?.('Cleaning up brand logo and favicon storage files...', 85);
-      if (deleteBrandStorageAssetsAction) {
-        const storageRes = await deleteBrandStorageAssetsAction(data?.brand_slug || params.brandSlug || '');
-        storageCleaned = storageRes.success;
-      }
+      const { data: storageRes } = await supabase.functions.invoke('delete-auth-users', {
+        body: { userIds: [], brandSlug: data?.brand_slug || params.brandSlug || '' },
+      });
+      storageCleaned = storageRes?.storageCleaned ?? true;
     }
   }
 

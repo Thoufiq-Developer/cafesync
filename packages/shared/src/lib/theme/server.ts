@@ -178,19 +178,7 @@ export const findBrandThemeById = cache(async (brandId: string): Promise<BrandTh
     return findDemoThemeById(brandId);
   }
 
-  if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    const cachedFetch = unstable_cache(
-      async (id: string) => fetchBrandThemeFromDb(id),
-      [`brand-theme-${brandId}`],
-      {
-        tags: [`brand-theme:${brandId}`],
-        revalidate: 3600,
-      }
-    );
-    return cachedFetch(brandId);
-  }
-
-  // Fallback without service role key: use caller's authenticated SSR client directly (outside unstable_cache)
+  // Use caller's authenticated SSR client directly
   const supabase = (await createClient()) as any;
   return fetchBrandThemeFromDb(brandId, supabase);
 });
@@ -247,7 +235,7 @@ async function fetchBrandLoginBySlugFromDb(slug: string): Promise<PublicBrandLog
     // Must use cookie-less anon client inside unstable_cache (Next.js forbids cookies() inside unstable_cache)
     const supabase = createStatelessAnonClient() as any;
     if (!supabase) return null;
-    const { data } = await supabase.rpc('get_public_brand_login', { p_slug: cleanSlug });
+    const { data } = await supabase.rpc('get_public_brand_theme', { slug: cleanSlug });
     const row = Array.isArray(data) ? data[0] : null;
     if (!row) {
       return null;

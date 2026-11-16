@@ -1,51 +1,54 @@
+'use client';
+
 import React from 'react';
-import { getCurrentUserContext } from '@/lib/auth';
+import { useAuth } from '@/lib/auth-context';
 import { SharedAppLayout } from '@/components/shared/layout-wrapper';
 import { AssetsManagerClient } from '@/components/shop/assets-manager-client';
-import { createClient } from '@/lib/supabase/server';
+import { supabase } from '@/lib/supabase/client';
 import { isSupabaseConfigured } from '@/lib/supabase/config';
 import { getTodayKolkata } from '@/lib/calculations/dates';
 import { DEMO_ASSETS } from '@/lib/demo-shop-data';
-import { redirect } from 'next/navigation';
 import { Wrench } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 
-export const dynamic = 'force-dynamic';
-
-export default async function ShopAssetsPage() {
-  const user = await getCurrentUserContext();
-  if (!user || user.role !== 'manager') {
-    redirect('/login');
-  }
-
+export default function ShopAssetsPage() {
+  const { profile, shop, brand } = useAuth();
+  const shopId = profile?.shop_id || shop?.id;
   const isLive = isSupabaseConfigured();
   const today = getTodayKolkata();
-  const supabase = await createClient();
 
-  // 1. Fetch Assets for this shop
-  let assets = isLive ? [] : DEMO_ASSETS;
-  if (user.shopId) {
-    const { data: dbAssets } = (await supabase
-      .from('assets')
-      .select('*')
-      .eq('shop_id', user.shopId)
-      .order('next_service_due', { ascending: true })) as { data: any[] | null; error: any };
+  const { data: assets = [], isLoading } = useQuery({
+    queryKey: ['shop-assets', shopId],
+    queryFn: async () => {
+      if (!isLive) return DEMO_ASSETS;
+      if (!shopId) return [];
 
-    if (dbAssets && (dbAssets.length > 0 || isLive)) {
-      assets = dbAssets;
-    }
-  }
+      const { data, error } = await supabase
+        .from('assets')
+        .select('*')
+        .eq('shop_id', shopId)
+        .order('next_service_due', { ascending: true });
+
+      if (error) {
+        console.warn('Error fetching shop assets:', error);
+        return [];
+      }
+      return data || [];
+    },
+    enabled: Boolean(!isLive || shopId),
+  });
 
   const managerUser = {
-    fullName: user.fullName,
-    email: user.email,
-    phone: user.phone,
+    fullName: profile?.full_name || 'Shop Manager',
+    email: profile?.email || '',
+    phone: '',
     role: 'manager' as const,
-    shopName: user.shop?.name || 'Shop Counter',
-    shopCode: user.shop?.code || 'SHOP-01',
+    shopName: shop?.name || 'Shop Counter',
+    shopCode: shop?.code || 'SHOP-01',
   };
 
   return (
-    <SharedAppLayout user={managerUser} brand={user.brand}>
+    <SharedAppLayout user={managerUser} brand={brand as any}>
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-3 border-b border-slate-200">
           <div>
@@ -65,4 +68,3 @@ export default async function ShopAssetsPage() {
     </SharedAppLayout>
   );
 }
-

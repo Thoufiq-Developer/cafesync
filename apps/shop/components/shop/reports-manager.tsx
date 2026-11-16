@@ -20,6 +20,8 @@ import {
   ItemWiseFilterState,
   ItemWiseSummaryView,
 } from '@/components/shared/item-wise-summary-view';
+import { buildClientReportData } from '@/lib/reports/client-builder';
+import { exportReportExcel, exportReportPdf } from '@/lib/reports/client-exporter';
 import { ReportPreviewModal } from '@/components/shared/report-preview-modal';
 
 interface ReportsManagerProps {
@@ -85,59 +87,29 @@ export function ReportsManager({ shopId, shopName, brandName }: ReportsManagerPr
   const activeEnd =
     periodMode === 'month' ? getMonthBounds(selectedMonth).end : endDate;
 
-  const buildDownloadUrl = (format: 'excel' | 'pdf') => {
-    if (selectedReport === 'item_wise') {
-      const sp = new URLSearchParams({
-        action: format,
-        shopId,
-        startDate: activeStart,
-        endDate: activeEnd,
-        kind: itemFilters.kind,
-      });
-      if (itemFilters.category) sp.set('category', itemFilters.category);
-      if (itemFilters.search) sp.set('search', itemFilters.search);
-      if (format === 'pdf') {
-        sp.set('includeDetails', String(includeItemDetails));
-      }
-      return `/api/reports/item-wise?${sp.toString()}`;
-    }
-
-    const endpoint = format === 'excel' ? '/api/reports/excel' : '/api/reports/pdf';
-    const sp = new URLSearchParams({
-      shopId,
-      month: selectedMonth,
-      startDate: activeStart,
-      endDate: activeEnd,
-      reportType: selectedReport,
-      includeDetails: String(includeItemDetails),
-    });
-    return `${endpoint}?${sp.toString()}`;
-  };
-
   const downloadExcel = async () => {
     setIsDownloadingExcel(true);
     const toastId = toast.loading('Generating Excel report...');
 
     try {
-      const url = buildDownloadUrl('excel');
-      const res = await fetch(url);
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || 'Failed to generate Excel report');
+      const reportData = await buildClientReportData({
+        shopId,
+        startDate: activeStart,
+        endDate: activeEnd,
+        month: selectedMonth,
+        reportType: selectedReport,
+        includeItemDetails,
+      });
+
+      if (!reportData) {
+        throw new Error('Failed to assemble report data');
       }
 
-      const blob = await res.blob();
-      const downloadUrl = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = downloadUrl;
-      a.download = `${brandName}_${shopName}_${selectedReport}_${activeStart}_${activeEnd}.xlsx`.replace(
+      const filename = `${brandName}_${shopName}_${selectedReport}_${activeStart}_${activeEnd}.xlsx`.replace(
         /\s+/g,
         '_'
       );
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      window.URL.revokeObjectURL(downloadUrl);
+      await exportReportExcel(reportData, filename);
 
       toast.success('Excel report downloaded successfully!', { id: toastId });
     } catch (err: any) {
@@ -152,25 +124,24 @@ export function ReportsManager({ shopId, shopName, brandName }: ReportsManagerPr
     const toastId = toast.loading('Rendering branded A4 PDF statement...');
 
     try {
-      const url = buildDownloadUrl('pdf');
-      const res = await fetch(url);
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || 'Failed to generate PDF report');
+      const reportData = await buildClientReportData({
+        shopId,
+        startDate: activeStart,
+        endDate: activeEnd,
+        month: selectedMonth,
+        reportType: selectedReport,
+        includeItemDetails,
+      });
+
+      if (!reportData) {
+        throw new Error('Failed to assemble report data');
       }
 
-      const blob = await res.blob();
-      const downloadUrl = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = downloadUrl;
-      a.download = `${brandName}_${shopName}_${selectedReport}_${activeStart}_${activeEnd}.pdf`.replace(
+      const filename = `${brandName}_${shopName}_${selectedReport}_${activeStart}_${activeEnd}.pdf`.replace(
         /\s+/g,
         '_'
       );
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      window.URL.revokeObjectURL(downloadUrl);
+      await exportReportPdf(reportData, filename);
 
       toast.success('PDF statement downloaded successfully!', { id: toastId });
     } catch (err: any) {

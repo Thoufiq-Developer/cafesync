@@ -1,134 +1,150 @@
-import React from 'react';
-import { getCurrentUserContext } from '@/lib/auth';
+'use client';
+
+import React, { Suspense } from 'react';
+import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
+import { useAuth } from '@/lib/auth-context';
 import { SharedAppLayout } from '@/components/shared/layout-wrapper';
 import { StaffSalaryManager, EmployeeSalaryItem } from '@/components/shop/staff-salary-manager';
-import { createClient } from '@/lib/supabase/server';
+import { supabase } from '@/lib/supabase/client';
 import { isSupabaseConfigured } from '@/lib/supabase/config';
 import { getCurrentMonthKolkata, getPreviousMonth, getNextMonth, formatDisplayMonth } from '@/lib/calculations/dates';
 import { DEMO_EMPLOYEES, DEMO_PAYMENT_MODES } from '@/lib/demo-shop-data';
-import { redirect } from 'next/navigation';
-import { Users, ChevronLeft, ChevronRight } from 'lucide-react';
-import Link from 'next/link';
+import { Users, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 
-export const dynamic = 'force-dynamic';
+function StaffSalaryContent() {
+  const { profile, shop, brand } = useAuth();
+  const searchParams = useSearchParams();
 
-export default async function ShopStaffSalaryPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ month?: string }>;
-}) {
-  const user = await getCurrentUserContext();
-  if (!user || user.role !== 'manager') {
-    redirect('/login');
-  }
-
-  const isLive = isSupabaseConfigured();
-  const resolvedParams = await searchParams;
   const currentMonth = getCurrentMonthKolkata();
-  const selectedMonth = resolvedParams?.month || currentMonth;
-
+  const selectedMonth = searchParams.get('month') || currentMonth;
   const prevMonth = getPreviousMonth(selectedMonth);
   const nextMonth = getNextMonth(selectedMonth);
 
-  const supabase = await createClient();
+  const isLive = isSupabaseConfigured();
+  const shopId = profile?.shop_id || shop?.id;
+  const brandId = profile?.brand_id || brand?.id;
 
-  const [empsRes, modesRes, recordsRes, monthRecRes] = await Promise.all([
-    user.shopId
-      ? supabase
-          .from('employees')
-          .select('id, name, phone, role_title, rate_per_day, is_active')
-          .eq('shop_id', user.shopId)
-          .eq('is_active', true)
-          .order('name', { ascending: true })
-      : Promise.resolve({ data: null }),
-    user.brandId
-      ? supabase
-          .from('payment_modes')
-          .select('id, name')
-          .eq('brand_id', user.brandId)
-          .eq('is_active', true)
-          .order('name', { ascending: true })
-      : Promise.resolve({ data: null }),
-    user.shopId
-      ? supabase
-          .from('salary_records')
-          .select('employee_id, days_worked, rate_snapshot, gross, advances_total, paid_total, balance')
-          .eq('shop_id', user.shopId)
-          .eq('month', selectedMonth)
-      : Promise.resolve({ data: null }),
-    user.shopId
-      ? supabase
-          .from('month_openings')
-          .select('closed_at')
-          .eq('shop_id', user.shopId)
-          .eq('month', selectedMonth)
-          .maybeSingle()
-      : Promise.resolve({ data: null }),
-  ]);
+  const { data, isLoading } = useQuery({
+    queryKey: ['staff-salary', shopId, brandId, selectedMonth],
+    queryFn: async () => {
+      if (!isLive) {
+        const salaryRecordMap: Record<string, any> = {};
+        const employeesData: EmployeeSalaryItem[] = DEMO_EMPLOYEES.map((emp) => {
+          const rate = Number(emp.rate_per_day ?? 0);
+          const days = selectedMonth === currentMonth ? 26 : 28;
+          const gross = Math.round(days * rate * 100) / 100;
+          const advances = 1500;
+          const paid = 0;
+          const balance = Math.round((gross - advances - paid) * 100) / 100;
 
-  let rawEmployees = isLive ? [] : DEMO_EMPLOYEES;
-  const dbEmployees = empsRes?.data as any[] | null;
-  if (dbEmployees && (dbEmployees.length > 0 || isLive)) {
-    rawEmployees = dbEmployees;
-  }
+          return {
+            id: emp.id,
+            name: emp.name,
+            phone: emp.phone,
+            role_title: emp.role_title,
+            rate_per_day: rate,
+            days_worked: days,
+            gross,
+            advances_total: advances,
+            paid_total: paid,
+            balance,
+          };
+        });
 
-  let paymentModes = isLive ? [] : DEMO_PAYMENT_MODES;
-  const dbModes = modesRes?.data as any[] | null;
-  if (dbModes && (dbModes.length > 0 || isLive)) {
-    paymentModes = dbModes;
-  }
+        return {
+          employeesData,
+          paymentModes: DEMO_PAYMENT_MODES,
+          isMonthClosed: false,
+        };
+      }
 
-  let salaryRecordMap: Record<string, any> = {};
-  const records = recordsRes?.data as any[] | null;
-  if (records) {
-    records.forEach((r) => {
-      salaryRecordMap[r.employee_id] = r;
-    });
-  }
+      const [empsRes, modesRes, recordsRes, monthRecRes] = await Promise.all([
+        shopId
+          ? supabase
+              .from('employees')
+              .select('id, name, phone, role_title, rate_per_day, is_active')
+              .eq('shop_id', shopId)
+              .eq('is_active', true)
+              .order('name', { ascending: true })
+          : Promise.resolve({ data: [] }),
+        brandId
+          ? supabase
+              .from('payment_modes')
+              .select('id, name')
+              .eq('brand_id', brandId)
+              .eq('is_active', true)
+              .order('name', { ascending: true })
+          : Promise.resolve({ data: [] }),
+        shopId
+          ? supabase
+              .from('salary_records')
+              .select('employee_id, days_worked, rate_snapshot, gross, advances_total, paid_total, balance')
+              .eq('shop_id', shopId)
+              .eq('month', selectedMonth)
+          : Promise.resolve({ data: [] }),
+        shopId
+          ? supabase
+              .from('month_openings')
+              .select('closed_at')
+              .eq('shop_id', shopId)
+              .eq('month', selectedMonth)
+              .maybeSingle()
+          : Promise.resolve({ data: null }),
+      ]);
 
-  const isMonthClosed = Boolean((monthRecRes?.data as any)?.closed_at);
+      const rawEmployees = (empsRes as any)?.data || [];
+      const paymentModes = (modesRes as any)?.data || [];
+      const salaryRecordMap: Record<string, any> = {};
+      ((recordsRes as any)?.data || []).forEach((r: any) => {
+        salaryRecordMap[r.employee_id] = r;
+      });
 
-  // Combine employees with their salary record for selected month
-  const employeesData: EmployeeSalaryItem[] = rawEmployees.map((emp) => {
-    const rec = salaryRecordMap[emp.id];
-    const rate = Number(rec?.rate_snapshot ?? emp.rate_per_day ?? 0);
-    const days = rec
-      ? Number(rec.days_worked || 0)
-      : (isLive ? 0 : (selectedMonth === currentMonth ? 26 : 28));
-    const gross = rec
-      ? Number(rec.gross || 0)
-      : Math.round(days * rate * 100) / 100;
-    const advances = rec ? Number(rec.advances_total || 0) : (isLive ? 0 : 1500);
-    const paid = Number(rec?.paid_total || 0);
-    const balance = rec
-      ? Number(rec.balance || 0)
-      : Math.round((gross - advances - paid) * 100) / 100;
+      const isMonthClosed = Boolean((monthRecRes as any)?.data?.closed_at);
 
-    return {
-      id: emp.id,
-      name: emp.name,
-      phone: emp.phone,
-      role_title: emp.role_title,
-      rate_per_day: rate,
-      days_worked: days,
-      gross,
-      advances_total: advances,
-      paid_total: paid,
-      balance,
-    };
+      const employeesData: EmployeeSalaryItem[] = rawEmployees.map((emp: any) => {
+        const rec = salaryRecordMap[emp.id];
+        const rate = Number(rec?.rate_snapshot ?? emp.rate_per_day ?? 0);
+        const days = rec ? Number(rec.days_worked || 0) : 0;
+        const gross = rec ? Number(rec.gross || 0) : Math.round(days * rate * 100) / 100;
+        const advances = rec ? Number(rec.advances_total || 0) : 0;
+        const paid = Number(rec?.paid_total || 0);
+        const balance = rec ? Number(rec.balance || 0) : Math.round((gross - advances - paid) * 100) / 100;
+
+        return {
+          id: emp.id,
+          name: emp.name,
+          phone: emp.phone,
+          role_title: emp.role_title,
+          rate_per_day: rate,
+          days_worked: days,
+          gross,
+          advances_total: advances,
+          paid_total: paid,
+          balance,
+        };
+      });
+
+      return {
+        employeesData,
+        paymentModes,
+        isMonthClosed,
+      };
+    },
   });
 
   const managerUser = {
-    fullName: user.fullName,
-    email: user.email,
-    phone: user.phone,
+    fullName: profile?.full_name || 'Shop Manager',
+    email: profile?.email || '',
+    phone: '',
     role: 'manager' as const,
-    shopName: user.shop?.name || 'Shop Counter',
-    shopCode: user.shop?.code || 'SHOP-01',
+    shopName: shop?.name || 'Shop Counter',
+    shopCode: shop?.code || 'SHOP-01',
   };
 
   return (
-    <SharedAppLayout user={managerUser} brand={user.brand}>
+    <SharedAppLayout user={managerUser} brand={brand as any}>
       <div className="space-y-6">
         {/* Header & Month Navigator */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-slate-200">
@@ -167,14 +183,28 @@ export default async function ShopStaffSalaryPage({
         </div>
 
         {/* Staff Salary Component */}
-        <StaffSalaryManager
-          employees={employeesData}
-          selectedMonth={selectedMonth}
-          paymentModes={paymentModes}
-          isMonthClosed={isMonthClosed}
-        />
+        {isLoading ? (
+          <div className="py-12 flex items-center justify-center text-slate-400">
+            <Loader2 className="h-6 w-6 animate-spin mr-2" />
+            <span className="text-xs">Loading employee attendance...</span>
+          </div>
+        ) : (
+          <StaffSalaryManager
+            employees={data?.employeesData || []}
+            selectedMonth={selectedMonth}
+            paymentModes={data?.paymentModes || []}
+            isMonthClosed={data?.isMonthClosed || false}
+          />
+        )}
       </div>
     </SharedAppLayout>
   );
 }
 
+export default function ShopStaffSalaryPage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading staff salary ledger...</div>}>
+      <StaffSalaryContent />
+    </Suspense>
+  );
+}

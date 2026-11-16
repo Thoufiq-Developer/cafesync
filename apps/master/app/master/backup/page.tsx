@@ -1,63 +1,60 @@
+'use client';
+
 import React from 'react';
-import { redirect } from 'next/navigation';
-import { getCurrentUserContext } from '@/lib/auth';
+import { useQuery } from '@tanstack/react-query';
+import { useAuth } from '@/lib/auth-context';
+import { supabase } from '@/lib/supabase/client';
 import { SharedAppLayout } from '@/components/shared/layout-wrapper';
 import { BackupView } from '@/components/master/backup-view';
-import { createClient } from '@/lib/supabase/server';
-import { isSupabaseConfigured } from '@/lib/supabase/config';
 import { DEMO_MASTER_BRANDS } from '@/lib/demo-master-data';
-import { listAllBrandThemes } from '@/lib/theme/server';
+import { DEMO_ADMIN_SHOPS } from '@/lib/demo-admin-data';
+import { Loader2 } from 'lucide-react';
 
-export const dynamic = 'force-dynamic';
+export default function MasterBackupPage() {
+  const { profile, isLive } = useAuth();
 
-export default async function MasterBackupPage() {
-  const user = await getCurrentUserContext();
-  if (!user || user.role !== 'master') {
-    redirect('/login');
-  }
+  const { data, isLoading } = useQuery({
+    queryKey: ['master-backup-data', isLive],
+    queryFn: async () => {
+      if (!isLive) {
+        const demoBrands = DEMO_MASTER_BRANDS.map((b) => ({
+          id: b.id,
+          name: b.name,
+          slug: b.slug,
+          shops_count: b.shops_count || 1,
+          status: b.status || 'active',
+          shops: DEMO_ADMIN_SHOPS.map((s) => ({ id: s.id, name: s.name, code: s.code })),
+        }));
 
-  let brands: any[] = [];
-  let history: any[] = [];
-  let removals: any[] = [];
-  let batches: any[] = [];
+        return {
+          brands: demoBrands,
+          history: [],
+          removals: [],
+          batches: [],
+        };
+      }
 
-  if (!isSupabaseConfigured()) {
-    const demoById = new Map(DEMO_MASTER_BRANDS.map((b) => [b.id, b]));
-    const bundles = await listAllBrandThemes();
-    brands = bundles.map((bundle) => {
-      const base = demoById.get(bundle.brand.id);
-      return {
-        id: bundle.brand.id,
-        name: bundle.brand.name,
-        slug: bundle.brand.slug,
-        shops_count: base?.shops_count || 1,
-        status: bundle.brand.status || 'active',
-      };
-    });
-  } else {
-    try {
-      const supabase = (await createClient()) as any;
       const [
         { data: dbBrands, error: brandsErr },
         { data: dbHistory, error: historyErr },
         { data: dbRemovals },
         { data: dbBatches },
       ] = await Promise.all([
-        supabase
+        (supabase as any)
           .from('brands')
           .select('id, name, slug, status, shops(id, name, code)')
           .order('name', { ascending: true }),
-        supabase
+        (supabase as any)
           .from('backup_log')
           .select('*, brands(name)')
           .order('created_at', { ascending: false })
           .limit(30),
-        supabase
+        (supabase as any)
           .from('removal_log')
           .select('*')
           .order('created_at', { ascending: false })
           .limit(30),
-        supabase
+        (supabase as any)
           .from('import_batches')
           .select('*')
           .order('created_at', { ascending: false })
@@ -67,7 +64,7 @@ export default async function MasterBackupPage() {
       if (brandsErr) console.error('Error fetching brands for backup:', brandsErr);
       if (historyErr) console.error('Error fetching backup log history:', historyErr);
 
-      brands = (dbBrands || []).map((b: any) => ({
+      const brands = (dbBrands || []).map((b: any) => ({
         id: b.id,
         name: b.name,
         slug: b.slug,
@@ -76,7 +73,7 @@ export default async function MasterBackupPage() {
         shops: Array.isArray(b.shops) ? b.shops : [],
       }));
 
-      history = (dbHistory || []).map((h: any) => ({
+      const history = (dbHistory || []).map((h: any) => ({
         id: h.id,
         scope: h.scope,
         brand_id: h.brand_id,
@@ -87,28 +84,38 @@ export default async function MasterBackupPage() {
         brand_name: h.brands?.name || (h.scope === 'all' ? 'All Brands' : null),
       }));
 
-      removals = dbRemovals || [];
-      batches = dbBatches || [];
-    } catch (e) {
-      console.error('Master backup page server load error:', e);
-    }
-  }
+      return {
+        brands,
+        history,
+        removals: dbRemovals || [],
+        batches: dbBatches || [],
+      };
+    },
+  });
 
   const masterUser = {
-    fullName: user.fullName || 'Platform Master',
-    email: user.email || '',
-    phone: user.phone,
+    id: profile?.id,
+    fullName: profile?.full_name || 'Platform Master',
+    email: profile?.email || '',
+    phone: profile?.phone || '',
     role: 'master' as const,
   };
 
   return (
     <SharedAppLayout user={masterUser}>
-      <BackupView
-        brands={brands}
-        initialHistory={history}
-        initialRemovals={removals}
-        initialBatches={batches}
-      />
+      {isLoading || !data ? (
+        <div className="py-20 flex flex-col items-center justify-center gap-3 text-[#B9A58A] text-xs">
+          <Loader2 className="h-8 w-8 animate-spin text-[#C68846]" />
+          <span>Loading platform backup archives &amp; recovery ledger...</span>
+        </div>
+      ) : (
+        <BackupView
+          brands={data.brands}
+          initialHistory={data.history}
+          initialRemovals={data.removals}
+          initialBatches={data.batches}
+        />
+      )}
     </SharedAppLayout>
   );
 }

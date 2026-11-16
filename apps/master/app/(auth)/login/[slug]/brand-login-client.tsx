@@ -16,6 +16,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import type { PublicBrandLoginData } from '@/lib/theme/types';
+import { PoweredByFooter } from '@/components/shared/powered-by-footer';
 
 export interface DemoQuickAccount {
   email: string;
@@ -261,10 +262,6 @@ function BrandLoginInner({
           </Link>
         </div>
       </form>
-
-      <div className="pt-3 border-t border-slate-100 text-center text-[11px] text-slate-400">
-        Powered by CafeLedger
-      </div>
     </div>
   );
 
@@ -321,16 +318,18 @@ function BrandLoginInner({
 
           <div className="text-xs opacity-75 flex items-center justify-between">
             <span>₹ INR • Asia/Kolkata</span>
-            <span>Powered by CafeLedger</span>
           </div>
         </div>
 
         {/* Right Sign-In Column */}
         <div
-          className="flex flex-col items-center justify-center p-4 sm:p-8"
+          className="flex flex-col items-center justify-between p-4 sm:p-8 min-h-screen"
           style={bgStyle}
         >
-          {formCard}
+          <div className="w-full flex-1 flex flex-col items-center justify-center">
+            {formCard}
+          </div>
+          <PoweredByFooter variant="brand" />
         </div>
       </div>
     );
@@ -339,10 +338,13 @@ function BrandLoginInner({
   // Centered Full-Bleed Mode
   return (
     <div
-      className="min-h-screen flex flex-col items-center justify-center p-4 sm:p-6"
+      className="min-h-screen flex flex-col items-center justify-between p-4 sm:p-6"
       style={bgStyle}
     >
-      {formCard}
+      <div className="w-full flex-1 flex flex-col items-center justify-center">
+        {formCard}
+      </div>
+      <PoweredByFooter variant="brand" />
     </div>
   );
 }

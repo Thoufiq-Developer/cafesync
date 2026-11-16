@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState } from 'react';
-import ExcelJS from 'exceljs';
 import {
   UploadCloud,
   FileSpreadsheet,
@@ -61,11 +60,12 @@ export function ExcelImporter({ shops }: ExcelImporterProps) {
     setParsedRows([]);
 
     try {
+      const ExcelJS = (await import('exceljs')).default;
       const buffer = await file.arrayBuffer();
       const workbook = new ExcelJS.Workbook();
       await workbook.xlsx.load(buffer);
 
-      const sheets = workbook.worksheets.map((ws) => ws.name);
+      const sheets = workbook.worksheets.map((ws: any) => ws.name);
       setSheetNames(sheets);
 
       // Default to first sheet or one matching month name
@@ -81,7 +81,7 @@ export function ExcelImporter({ shops }: ExcelImporterProps) {
     }
   };
 
-  const parseSheet = (worksheet: ExcelJS.Worksheet) => {
+  const parseSheet = (worksheet: any) => {
     let colDate = -1;
     let colDesc = -1;
     let colMop = -1;
@@ -92,7 +92,7 @@ export function ExcelImporter({ shops }: ExcelImporterProps) {
     const rows: ParsedRow[] = [];
 
     // Find header row (usually row 1 or 2)
-    worksheet.eachRow((row, rowNumber) => {
+    worksheet.eachRow((row: any, rowNumber: number) => {
       const values = row.values as any[];
       if (!values) return;
 

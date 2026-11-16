@@ -1,19 +1,28 @@
 import React from 'react';
 import { isSupabaseConfigured } from '@/lib/supabase/config';
 import { LoginFormClient } from './login-form';
-
-export const dynamic = 'force-dynamic';
+import { PoweredByFooter } from '@/components/shared/powered-by-footer';
 
 export default function LoginPage() {
   const isLiveSupabase = isSupabaseConfigured();
 
   return (
-    <div className="min-h-screen flex flex-col justify-center items-center p-4 bg-gradient-to-br from-slate-100 via-white to-slate-200/70">
-      <LoginFormClient isLiveSupabase={isLiveSupabase} />
+    <div className="min-h-screen flex flex-col justify-between items-center p-4 sm:p-6 bg-[#28150E] text-[#F7E5BC]">
+      <div className="w-full flex-1 flex flex-col items-center justify-center max-w-md mx-auto py-8">
+        {/* Centered full CafeSync logo */}
+        <div className="w-full max-w-[340px] sm:max-w-[380px] mb-6 flex justify-center">
+          <img
+            src="/brand/cafesync-logo-full.png"
+            alt="CafeSync - Sales & Maintenance"
+            className="w-full h-auto object-contain rounded-md shadow-md"
+          />
+        </div>
 
-      <div className="mt-6 text-center text-xs text-slate-400">
-        Powered by CafeLedger • ₹ en-IN | Timezone: Asia/Kolkata (IST)
+        {/* Master Sign In Form */}
+        <LoginFormClient isLiveSupabase={isLiveSupabase} />
       </div>
+
+      <PoweredByFooter variant="master" />
     </div>
   );
 }

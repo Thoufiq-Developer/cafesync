@@ -2,6 +2,9 @@ import type { Metadata } from 'next';
 import './globals.css';
 import { Toaster } from '@/components/ui/sonner';
 import { ALL_FONT_VARIABLE_CLASSES } from '@/lib/theme/fonts';
+import { ReactQueryProvider } from '@/lib/query-provider';
+import { AuthProvider } from '@/lib/auth-context';
+import { ClientThemeProvider } from '@/lib/theme/client-theme-provider';
 
 export const metadata: Metadata = {
   title: 'CafeLedger | Shop Portal',
@@ -14,12 +17,45 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`h-full ${ALL_FONT_VARIABLE_CLASSES}`}>
+    <html lang="en" className={`h-full ${ALL_FONT_VARIABLE_CLASSES}`} suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+(function() {
+  try {
+    var slug = localStorage.getItem('cafesync_current_brand_slug') || 'snaxia';
+    var cached = localStorage.getItem('cafesync_theme_' + slug);
+    if (cached) {
+      var data = JSON.parse(cached);
+      if (data.mode === 'dark') {
+        document.documentElement.classList.add('dark');
+      } else if (data.mode === 'light') {
+        document.documentElement.classList.remove('dark');
+      }
+      if (data.cssVars) {
+        var root = document.documentElement;
+        for (var key in data.cssVars) {
+          root.style.setProperty(key, data.cssVars[key]);
+        }
+      }
+    }
+  } catch(e) {}
+})();
+`,
+          }}
+        />
+      </head>
       <body className="min-h-full flex flex-col font-sans">
-        {children}
-        <Toaster position="top-right" richColors />
+        <ReactQueryProvider>
+          <AuthProvider>
+            <ClientThemeProvider>
+              {children}
+              <Toaster position="top-right" richColors />
+            </ClientThemeProvider>
+          </AuthProvider>
+        </ReactQueryProvider>
       </body>
     </html>
   );
 }
-

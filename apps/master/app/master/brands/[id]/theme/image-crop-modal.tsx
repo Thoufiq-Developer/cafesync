@@ -425,27 +425,37 @@ export function ImageCropModal({
       }
 
       const normalizedKind = assetType.replace(/_/g, '-');
-      const fd = new FormData();
-      fd.append('brandId', brandId);
-      fd.append('kind', normalizedKind);
-      fd.append('assetType', assetType);
-      fd.append('file', finalFile);
+      let assetUrl = '';
+      const { isSupabaseConfigured } = await import('@/lib/supabase/config');
+      if (isSupabaseConfigured() && brandId) {
+        const { supabase } = await import('@/lib/supabase/client');
+        const objectPath = `${brandId}/${normalizedKind}.png`;
+        const { error: uploadErr } = await supabase.storage
+          .from('brand-assets')
+          .upload(objectPath, finalFile, {
+            contentType: 'image/png',
+            upsert: true,
+            cacheControl: '3600',
+          });
 
-      const resp = await fetch('/api/master/brand-assets', {
-        method: 'POST',
-        body: fd,
-      });
-      const json = await resp.json();
-      if (!resp.ok || !json.url) {
-        toast.error(json.error || 'Upload failed', { id: toastId });
-        return;
+        if (uploadErr) {
+          toast.error(uploadErr.message || 'Storage upload failed', { id: toastId });
+          return;
+        }
+
+        const { data: pub } = supabase.storage
+          .from('brand-assets')
+          .getPublicUrl(objectPath);
+        assetUrl = `${pub.publicUrl}?v=${Date.now()}`;
+      } else {
+        assetUrl = exportCanvas.toDataURL('image/png', 0.92);
       }
 
       toast.success(
         `Brand asset (${activeFrame.shortLabel}) cropped and saved!`,
         { id: toastId }
       );
-      onUploaded?.(json.url, assetType);
+      onUploaded?.(assetUrl, assetType);
       onClose();
     } catch (err: any) {
       toast.error(err?.message || 'Failed to upload asset', { id: toastId });

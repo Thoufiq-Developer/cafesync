@@ -1,5 +1,3 @@
-'use server';
-
 interface ActionResult<T = any> {
   success: boolean;
   data?: T;

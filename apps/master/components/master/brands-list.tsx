@@ -301,7 +301,11 @@ export function BrandsList({ initialBrands }: BrandsListProps) {
 
       {filteredBrands.length === 0 && (
         <div className="p-8 text-center bg-white rounded-xl border border-slate-200">
-          <Building2 className="h-8 w-8 text-slate-300 mx-auto mb-2" />
+          <img
+            src="/brand/cafesync-icon-192.png"
+            alt="CafeSync"
+            className="h-10 w-10 mx-auto mb-2 object-contain opacity-60 rounded-md"
+          />
           <h3 className="text-sm font-semibold text-slate-700">No Brands Found</h3>
           <p className="text-xs text-slate-500 mt-1">Try adjusting your search query or status filter.</p>
         </div>

@@ -1,29 +1,25 @@
+'use client';
+
 import React from 'react';
-import { getCurrentUserContext } from '@/lib/auth';
+import { useAuth } from '@/lib/auth-context';
 import { SharedAppLayout } from '@/components/shared/layout-wrapper';
 import { ReportsManager } from '@/components/shop/reports-manager';
-import { redirect } from 'next/navigation';
 import { FileSpreadsheet } from 'lucide-react';
 
-export const dynamic = 'force-dynamic';
-
-export default async function ShopReportsPage() {
-  const user = await getCurrentUserContext();
-  if (!user || user.role !== 'manager') {
-    redirect('/login');
-  }
+export default function ShopReportsPage() {
+  const { profile, shop, brand } = useAuth();
 
   const managerUser = {
-    fullName: user.fullName,
-    email: user.email,
-    phone: user.phone,
+    fullName: profile?.full_name || 'Shop Manager',
+    email: profile?.email || '',
+    phone: '',
     role: 'manager' as const,
-    shopName: user.shop?.name || 'Shop Counter',
-    shopCode: user.shop?.code || 'SHOP-01',
+    shopName: shop?.name || 'Shop Counter',
+    shopCode: shop?.code || 'SHOP-01',
   };
 
   return (
-    <SharedAppLayout user={managerUser} brand={user.brand}>
+    <SharedAppLayout user={managerUser} brand={brand as any}>
       <div className="space-y-6">
         <div className="pb-3 border-b border-slate-200">
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
@@ -36,12 +32,11 @@ export default async function ShopReportsPage() {
         </div>
 
         <ReportsManager
-          shopId={user.shopId || ''}
-          shopName={user.shop?.name || 'Outlet Counter'}
-          brandName={user.brand?.name || 'CafeLedger'}
+          shopId={profile?.shop_id || shop?.id || ''}
+          shopName={shop?.name || 'Outlet Counter'}
+          brandName={brand?.name || 'CafeSync'}
         />
       </div>
     </SharedAppLayout>
   );
 }
-

@@ -1,62 +1,36 @@
+'use client';
+
 import React from 'react';
-import { getCurrentUserContext } from '@/lib/auth';
+import { useQuery } from '@tanstack/react-query';
+import { useAuth } from '@/lib/auth-context';
+import { supabase } from '@/lib/supabase/client';
 import { SharedAppLayout } from '@/components/shared/layout-wrapper';
 import { BrandsList } from '@/components/master/brands-list';
-import { createClient } from '@/lib/supabase/server';
-import { isSupabaseConfigured } from '@/lib/supabase/config';
-import { getAuthEmailMap } from '@cafesync/shared/server-admin';
 import { getCurrentMonthKolkata, getMonthBounds } from '@/lib/calculations/dates';
 import { DEMO_MASTER_BRANDS, DemoMasterBrand } from '@/lib/demo-master-data';
-import { listAllBrandThemes } from '@/lib/theme/server';
-import { redirect } from 'next/navigation';
+import { Loader2 } from 'lucide-react';
 
-export const dynamic = 'force-dynamic';
+export default function MasterBrandsPage() {
+  const { profile, isLive } = useAuth();
 
-export default async function MasterBrandsPage() {
-  const user = await getCurrentUserContext();
-  if (!user || user.role !== 'master') {
-    redirect('/login');
-  }
+  const { data: brands, isLoading } = useQuery({
+    queryKey: ['master-brands', isLive],
+    queryFn: async () => {
+      if (!isLive) {
+        return DEMO_MASTER_BRANDS;
+      }
 
-  let brands: DemoMasterBrand[] = [];
-
-  if (!isSupabaseConfigured()) {
-    const demoById = new Map(DEMO_MASTER_BRANDS.map((b) => [b.id, b]));
-    const bundles = await listAllBrandThemes();
-    brands = bundles.map((bundle) => {
-      const base = demoById.get(bundle.brand.id);
-      return {
-        id: bundle.brand.id,
-        name: bundle.brand.name,
-        slug: bundle.brand.slug,
-        registration_no: bundle.brand.registration_no,
-        logo_url: bundle.settings.logo_url,
-        primary_color: bundle.settings.primary_color,
-        secondary_color: bundle.settings.secondary_color,
-        address: bundle.brand.address || '',
-        phone: bundle.brand.phone || '',
-        email: bundle.brand.email || '',
-        gstin: bundle.brand.gstin,
-        status: bundle.brand.status,
-        created_at: base?.created_at || new Date().toISOString(),
-        shops_count: base?.shops_count || 0,
-        admins_count: base?.admins_count || 1,
-        monthly_volume: base?.monthly_volume || 0,
-        admins: base?.admins || [],
-      };
-    });
-  } else {
-    try {
-      const supabase = (await createClient()) as any;
       const monthBounds = getMonthBounds(getCurrentMonthKolkata());
 
-      const [emailMap, { data: dbBrands, error: brandsErr }, { data: dbSummaries }] = await Promise.all([
-        getAuthEmailMap(),
-        supabase
+      const [
+        { data: dbBrands, error: brandsErr },
+        { data: dbSummaries },
+      ] = await Promise.all([
+        (supabase as any)
           .from('brands')
-          .select('*, shops(id), profiles(id, full_name, phone, role, is_active), brand_settings(logo_url, primary_color, secondary_color)')
+          .select('*, shops(id), profiles(id, full_name, username, email, phone, role, is_active), brand_settings(logo_url, primary_color, secondary_color)')
           .order('created_at', { ascending: false }),
-        supabase
+        (supabase as any)
           .from('daily_summary')
           .select('shop_id, income')
           .gte('summary_date', monthBounds.start)
@@ -85,7 +59,7 @@ export default async function MasterBrandsPage() {
         );
       });
 
-      brands = (dbBrands || []).map((b: any) => {
+      return (dbBrands || []).map((b: any) => {
         const brandShops = Array.isArray(b.shops) ? b.shops : [];
         const brandProfiles = Array.isArray(b.profiles) ? b.profiles : [];
         const admins = brandProfiles.filter((p: any) => p.role === 'admin');
@@ -111,27 +85,33 @@ export default async function MasterBrandsPage() {
           admins: admins.map((a: any) => ({
             id: a.id,
             full_name: a.full_name,
-            email: emailMap.get(a.id) || '',
+            email: a.email || (a.username ? `${a.username}@${b.slug}.cafesync.app` : ''),
             phone: a.phone || '',
             is_active: a.is_active,
           })),
         };
       });
-    } catch (err) {
-      console.error('Master brands page error:', err);
-    }
-  }
+    },
+  });
 
   const masterUser = {
-    fullName: user.fullName || 'Platform Master',
-    email: user.email || '',
-    phone: user.phone,
+    id: profile?.id,
+    fullName: profile?.full_name || 'Platform Master',
+    email: profile?.email || '',
+    phone: profile?.phone || '',
     role: 'master' as const,
   };
 
   return (
     <SharedAppLayout user={masterUser}>
-      <BrandsList initialBrands={brands} />
+      {isLoading || !brands ? (
+        <div className="py-20 flex flex-col items-center justify-center gap-3 text-[#B9A58A] text-xs">
+          <Loader2 className="h-8 w-8 animate-spin text-[#C68846]" />
+          <span>Loading franchise brand portfolio...</span>
+        </div>
+      ) : (
+        <BrandsList initialBrands={brands} />
+      )}
     </SharedAppLayout>
   );
 }

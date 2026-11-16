@@ -101,9 +101,81 @@ export function ActivityDrawer({
       if (userId !== 'all') qs.set('userId', userId);
       if (typeFilter !== 'all') qs.set('type', typeFilter);
 
-      const res = await fetch(`/api/activity?${qs.toString()}`, { cache: 'no-store' });
-      if (!res.ok) return;
-      const data = await res.json();
+      let data: any = null;
+      try {
+        const res = await fetch(`/api/activity?${qs.toString()}`, { cache: 'no-store' });
+        if (res.ok) {
+          data = await res.json();
+        }
+      } catch {
+        // network or 404 in static export
+      }
+
+      if (!data) {
+        // Fallback: direct browser Supabase client query
+        const { createClient } = await import('@/lib/supabase/client');
+        const supabase = createClient() as any;
+        const { formatAuditRow } = await import('@/lib/audit/format-activity');
+
+        const { data: authData } = await supabase.auth.getUser();
+        const userIdVal = authData?.user?.id;
+
+        let profile: any = null;
+        if (userIdVal) {
+          const { data: p } = await supabase.from('profiles').select('*').eq('id', userIdVal).maybeSingle();
+          profile = p;
+        }
+
+        let query = supabase.from('audit_log').select('*');
+        if (role === 'admin' && profile?.brand_id) {
+          query = query.or(`brand_id.eq.${profile.brand_id},brand_id.is.null`);
+        }
+        if (shopId !== 'all') {
+          query = query.eq('shop_id', shopId);
+        }
+        if (userId !== 'all') {
+          query = query.eq('user_id', userId);
+        }
+        const { data: rawLogs } = await query.order('created_at', { ascending: false }).limit(60);
+
+        const readAt = profile?.activity_read_at ? new Date(profile.activity_read_at).getTime() : 0;
+        let unread = 0;
+        const formatted = (rawLogs || []).map((row: any) => {
+          const itemAt = new Date(row.created_at).getTime();
+          const isUnread = itemAt > readAt;
+          if (isUnread) unread++;
+          return {
+            ...formatAuditRow({
+              id: row.id,
+              user_id: row.user_id,
+              action: row.action,
+              table_name: row.table_name,
+              record_id: row.record_id,
+              old_data: row.old_data,
+              new_data: row.new_data,
+              at: row.created_at,
+            }),
+            isUnread,
+          };
+        });
+
+        const [{ data: dbShops }, { data: dbProfiles }] = await Promise.all([
+          role === 'admin' && profile?.brand_id
+            ? supabase.from('shops').select('id, name').eq('brand_id', profile.brand_id)
+            : supabase.from('shops').select('id, name'),
+          role === 'admin' && profile?.brand_id
+            ? supabase.from('profiles').select('id, full_name').eq('brand_id', profile.brand_id)
+            : supabase.from('profiles').select('id, full_name'),
+        ]);
+
+        data = {
+          items: formatted,
+          shops: dbShops || [],
+          users: (dbProfiles || []).map((p: any) => ({ id: p.id, name: p.full_name })),
+          unreadCount: unread,
+        };
+      }
+
       setItems(data.items || []);
       setShops(data.shops || []);
       setUsers(data.users || []);
@@ -116,7 +188,7 @@ export function ActivityDrawer({
     } finally {
       setIsLoading(false);
     }
-  }, [shopId, userId, typeFilter, onUnreadCountChange, writeUnreadCache]);
+  }, [shopId, userId, typeFilter, role, onUnreadCountChange, writeUnreadCache]);
 
   useEffect(() => {
     if (open) {
@@ -166,8 +238,28 @@ export function ActivityDrawer({
   const handleMarkAllRead = async () => {
     setIsMarkingRead(true);
     try {
-      const res = await fetch('/api/activity', { method: 'POST' });
-      if (res.ok) {
+      let marked = false;
+      try {
+        const res = await fetch('/api/activity', { method: 'POST' });
+        if (res.ok) marked = true;
+      } catch {
+        // static export or 404
+      }
+
+      if (!marked) {
+        const { createClient } = await import('@/lib/supabase/client');
+        const supabase = createClient() as any;
+        const { data: authData } = await supabase.auth.getUser();
+        if (authData?.user?.id) {
+          await supabase
+            .from('profiles')
+            .update({ activity_read_at: new Date().toISOString() })
+            .eq('id', authData.user.id);
+          marked = true;
+        }
+      }
+
+      if (marked) {
         setItems((prev) => prev.map((it) => ({ ...it, isUnread: false })));
         setUnreadCount(0);
         writeUnreadCache(0);

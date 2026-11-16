@@ -1,129 +1,151 @@
-import React from 'react';
-import { getCurrentUserContext } from '@/lib/auth';
+'use client';
+
+import React, { Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { useAuth } from '@/lib/auth-context';
 import { SharedAppLayout } from '@/components/shared/layout-wrapper';
 import { MonthSummaryView, DaySummaryRow, PaymentModeShare, ExpenseCategoryShare } from '@/components/shop/month-summary-view';
-import { createClient } from '@/lib/supabase/server';
+import { supabase } from '@/lib/supabase/client';
 import { isSupabaseConfigured } from '@/lib/supabase/config';
 import { getCurrentMonthKolkata, getPreviousMonth, getNextMonth, formatDisplayMonth, getMonthBounds } from '@/lib/calculations/dates';
 import { calculatePeriodSummary } from '@/lib/calculations/financials';
-import { redirect } from 'next/navigation';
-import { CalendarCheck, ChevronLeft, ChevronRight } from 'lucide-react';
+import { CalendarCheck, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import Link from 'next/link';
+import { useQuery } from '@tanstack/react-query';
 
-export const dynamic = 'force-dynamic';
+function ShopMonthSummaryContent() {
+  const { profile, shop, brand } = useAuth();
+  const searchParams = useSearchParams();
 
-export default async function ShopMonthSummaryPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ month?: string }>;
-}) {
-  const user = await getCurrentUserContext();
-  if (!user || user.role !== 'manager') {
-    redirect('/login');
-  }
-
-  const isLive = isSupabaseConfigured();
-  const resolvedParams = await searchParams;
   const currentMonth = getCurrentMonthKolkata();
-  const selectedMonth = resolvedParams?.month || currentMonth;
-
+  const selectedMonth = searchParams.get('month') || currentMonth;
   const prevMonth = getPreviousMonth(selectedMonth);
   const nextMonth = getNextMonth(selectedMonth);
   const bounds = getMonthBounds(selectedMonth);
 
-  const supabase = await createClient();
+  const isLive = isSupabaseConfigured();
+  const shopId = profile?.shop_id || shop?.id;
 
-  const [monthOpeningRes, dailyRes, monthTxnsRes] = await Promise.all([
-    user.shopId
-      ? supabase
-          .from('month_openings')
-          .select('opening_balance')
-          .eq('shop_id', user.shopId)
-          .eq('month', selectedMonth)
-          .maybeSingle()
-      : Promise.resolve({ data: null }),
-    user.shopId
-      ? supabase
-          .from('daily_summary')
-          .select('summary_date, opening, income, expense, closing')
-          .eq('shop_id', user.shopId)
-          .gte('summary_date', bounds.start)
-          .lte('summary_date', bounds.end)
-          .order('summary_date', { ascending: true })
-      : Promise.resolve({ data: null }),
-    isLive && user.shopId
-      ? supabase
-          .from('transactions')
-          .select('kind, amount, item_name_snapshot, mode_name_snapshot')
-          .eq('shop_id', user.shopId)
-          .gte('txn_date', bounds.start)
-          .lte('txn_date', bounds.end)
-          .eq('is_deleted', false)
-      : Promise.resolve({ data: null }),
-  ]);
+  const { data, isLoading } = useQuery({
+    queryKey: ['shop-summary', shopId, selectedMonth],
+    queryFn: async () => {
+      if (!isLive) {
+        let openingBalance = 24000;
+        const dailyRows: DaySummaryRow[] = [];
+        let currBal = openingBalance;
+        for (let day = 1; day <= 28; day++) {
+          const dateStr = `${selectedMonth}-${String(day).padStart(2, '0')}`;
+          const dayIncome = 16000 + ((day * 730) % 7000);
+          const dayExpense = 9000 + ((day * 540) % 4000);
+          const net = dayIncome - dayExpense;
+          const closing = currBal + net;
 
-  // 1. Month Opening
-  let openingBalance = isLive ? 0 : 24000;
-  let hasExplicitOpening = false;
-  const monthOpening = monthOpeningRes?.data as any;
-  if (monthOpening) {
-    openingBalance = Number(monthOpening.opening_balance);
-    hasExplicitOpening = true;
-  }
+          dailyRows.push({
+            date: dateStr,
+            opening: currBal,
+            income: dayIncome,
+            expense: dayExpense,
+            net,
+            closing,
+          });
 
-  // 2. Daily Summary Rows for selected month
-  let dailyRows: DaySummaryRow[] = [];
-  const dbDaily = dailyRes?.data as any[] | null;
-  if (dbDaily && dbDaily.length > 0) {
-    dailyRows = dbDaily.map((r) => ({
-      date: r.summary_date,
-      opening: Number(r.opening),
-      income: Number(r.income),
-      expense: Number(r.expense),
-      net: Number(r.income) - Number(r.expense),
-      closing: Number(r.closing),
-    }));
-    if (!hasExplicitOpening) {
-      openingBalance = dailyRows[0].opening;
-    }
-  }
+          currBal = closing;
+        }
 
-  // Fallback demo rows only in local demo mode
-  if (!isLive && dailyRows.length === 0) {
-    let currBal = openingBalance;
-    for (let day = 1; day <= 28; day++) {
-      const dateStr = `${selectedMonth}-${String(day).padStart(2, '0')}`;
-      const dayIncome = 16000 + ((day * 730) % 7000);
-      const dayExpense = 9000 + ((day * 540) % 4000);
-      const net = dayIncome - dayExpense;
-      const closing = currBal + net;
+        const totalIncome = dailyRows.reduce((sum, r) => sum + r.income, 0);
+        const totalExpense = dailyRows.reduce((sum, r) => sum + r.expense, 0);
+        const closingBalance = dailyRows.length > 0 ? dailyRows[dailyRows.length - 1].closing : openingBalance;
+        const summary = calculatePeriodSummary({ openingBalance, totalIncome, totalExpense });
 
-      dailyRows.push({
-        date: dateStr,
-        opening: currBal,
-        income: dayIncome,
-        expense: dayExpense,
-        net,
-        closing,
-      });
+        const paymentModeShares: PaymentModeShare[] = [
+          { name: 'CASH', amount: Math.round(totalIncome * 0.32), percentage: 32 },
+          { name: 'GPAY / UPI', amount: Math.round(totalIncome * 0.44), percentage: 44 },
+          { name: 'BANK / SWIGGY', amount: Math.round(totalIncome * 0.16), percentage: 16 },
+          { name: 'CARD', amount: Math.round(totalIncome * 0.08), percentage: 8 },
+        ];
+        const topExpenseCategories: ExpenseCategoryShare[] = [
+          { category: 'Fresh Milk & Dairy', amount: Math.round(totalExpense * 0.28), percentage: 28 },
+          { category: 'Specialty Coffee Beans', amount: Math.round(totalExpense * 0.22), percentage: 22 },
+          { category: 'Artisan Breads & Bakery', amount: Math.round(totalExpense * 0.16), percentage: 16 },
+          { category: 'Packaging & Takeaway Cups', amount: Math.round(totalExpense * 0.12), percentage: 12 },
+          { category: 'Commercial Kitchen Gas', amount: Math.round(totalExpense * 0.08), percentage: 8 },
+          { category: 'Petty Cash & Miscellaneous', amount: Math.round(totalExpense * 0.14), percentage: 14 },
+        ];
 
-      currBal = closing;
-    }
-  }
+        return {
+          openingBalance,
+          totalIncome,
+          totalExpense,
+          profitLoss: summary.profitLoss,
+          closingBalance,
+          dailyRows,
+          paymentModeShares,
+          topExpenseCategories,
+        };
+      }
 
-  const totalIncome = dailyRows.reduce((sum, r) => sum + r.income, 0);
-  const totalExpense = dailyRows.reduce((sum, r) => sum + r.expense, 0);
-  const closingBalance = dailyRows.length > 0 ? dailyRows[dailyRows.length - 1].closing : openingBalance;
-  const summary = calculatePeriodSummary({ openingBalance, totalIncome, totalExpense });
+      const [monthOpeningRes, dailyRes, monthTxnsRes] = await Promise.all([
+        shopId
+          ? supabase
+              .from('month_openings')
+              .select('opening_balance')
+              .eq('shop_id', shopId)
+              .eq('month', selectedMonth)
+              .maybeSingle()
+          : Promise.resolve({ data: null }),
+        shopId
+          ? supabase
+              .from('daily_summary')
+              .select('summary_date, opening, income, expense, closing')
+              .eq('shop_id', shopId)
+              .gte('summary_date', bounds.start)
+              .lte('summary_date', bounds.end)
+              .order('summary_date', { ascending: true })
+          : Promise.resolve({ data: null }),
+        shopId
+          ? supabase
+              .from('transactions')
+              .select('kind, amount, item_name_snapshot, mode_name_snapshot')
+              .eq('shop_id', shopId)
+              .gte('txn_date', bounds.start)
+              .lte('txn_date', bounds.end)
+              .eq('is_deleted', false)
+          : Promise.resolve({ data: null }),
+      ]);
 
-  // 3. Payment Mode Shares & Top Expense Categories
-  let paymentModeShares: PaymentModeShare[] = [];
-  let topExpenseCategories: ExpenseCategoryShare[] = [];
+      let openingBalance = 0;
+      let hasExplicitOpening = false;
+      const monthOpening = monthOpeningRes?.data as any;
+      if (monthOpening) {
+        openingBalance = Number(monthOpening.opening_balance);
+        hasExplicitOpening = true;
+      }
 
-  if (isLive) {
-    if (user.shopId) {
+      let dailyRows: DaySummaryRow[] = [];
+      const dbDaily = dailyRes?.data as any[] | null;
+      if (dbDaily && dbDaily.length > 0) {
+        dailyRows = dbDaily.map((r) => ({
+          date: r.summary_date,
+          opening: Number(r.opening),
+          income: Number(r.income),
+          expense: Number(r.expense),
+          net: Number(r.income) - Number(r.expense),
+          closing: Number(r.closing),
+        }));
+        if (!hasExplicitOpening) {
+          openingBalance = dailyRows[0].opening;
+        }
+      }
+
+      const totalIncome = dailyRows.reduce((sum, r) => sum + r.income, 0);
+      const totalExpense = dailyRows.reduce((sum, r) => sum + r.expense, 0);
+      const closingBalance = dailyRows.length > 0 ? dailyRows[dailyRows.length - 1].closing : openingBalance;
+      const summary = calculatePeriodSummary({ openingBalance, totalIncome, totalExpense });
+
+      let paymentModeShares: PaymentModeShare[] = [];
+      let topExpenseCategories: ExpenseCategoryShare[] = [];
+
       const monthTxns = (monthTxnsRes?.data || []) as any[];
-
       const modeMap: Record<string, number> = {};
       const expCatMap: Record<string, number> = {};
       let totalModeIncome = 0;
@@ -158,35 +180,32 @@ export default async function ShopMonthSummaryPage({
         }))
         .sort((a, b) => b.amount - a.amount)
         .slice(0, 6);
-    }
-  } else {
-    paymentModeShares = [
-      { name: 'CASH', amount: Math.round(totalIncome * 0.32), percentage: 32 },
-      { name: 'GPAY / UPI', amount: Math.round(totalIncome * 0.44), percentage: 44 },
-      { name: 'BANK / SWIGGY', amount: Math.round(totalIncome * 0.16), percentage: 16 },
-      { name: 'CARD', amount: Math.round(totalIncome * 0.08), percentage: 8 },
-    ];
-    topExpenseCategories = [
-      { category: 'Fresh Milk & Dairy', amount: Math.round(totalExpense * 0.28), percentage: 28 },
-      { category: 'Specialty Coffee Beans', amount: Math.round(totalExpense * 0.22), percentage: 22 },
-      { category: 'Artisan Breads & Bakery', amount: Math.round(totalExpense * 0.16), percentage: 16 },
-      { category: 'Packaging & Takeaway Cups', amount: Math.round(totalExpense * 0.12), percentage: 12 },
-      { category: 'Commercial Kitchen Gas', amount: Math.round(totalExpense * 0.08), percentage: 8 },
-      { category: 'Petty Cash & Miscellaneous', amount: Math.round(totalExpense * 0.14), percentage: 14 },
-    ];
-  }
+
+      return {
+        openingBalance,
+        totalIncome,
+        totalExpense,
+        profitLoss: summary.profitLoss,
+        closingBalance,
+        dailyRows,
+        paymentModeShares,
+        topExpenseCategories,
+      };
+    },
+    enabled: Boolean(!isLive || shopId),
+  });
 
   const managerUser = {
-    fullName: user.fullName,
-    email: user.email,
-    phone: user.phone,
+    fullName: profile?.full_name || 'Shop Manager',
+    email: profile?.email || '',
+    phone: '',
     role: 'manager' as const,
-    shopName: user.shop?.name || 'Shop Counter',
-    shopCode: user.shop?.code || 'SHOP-01',
+    shopName: shop?.name || 'Shop Counter',
+    shopCode: shop?.code || 'SHOP-01',
   };
 
   return (
-    <SharedAppLayout user={managerUser} brand={user.brand}>
+    <SharedAppLayout user={managerUser} brand={brand as any}>
       <div className="space-y-6">
         {/* Header & Month Navigator */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-slate-200">
@@ -224,19 +243,33 @@ export default async function ShopMonthSummaryPage({
         </div>
 
         {/* Month Summary View */}
-        <MonthSummaryView
-          selectedMonth={selectedMonth}
-          openingBalance={openingBalance}
-          totalIncome={totalIncome}
-          totalExpense={totalExpense}
-          profitLoss={summary.profitLoss}
-          closingBalance={closingBalance}
-          dailyRows={dailyRows}
-          paymentModeShares={paymentModeShares}
-          topExpenseCategories={topExpenseCategories}
-        />
+        {isLoading || !data ? (
+          <div className="py-12 flex items-center justify-center text-slate-400">
+            <Loader2 className="h-6 w-6 animate-spin mr-2" />
+            <span className="text-xs">Loading monthly statement...</span>
+          </div>
+        ) : (
+          <MonthSummaryView
+            selectedMonth={selectedMonth}
+            openingBalance={data.openingBalance}
+            totalIncome={data.totalIncome}
+            totalExpense={data.totalExpense}
+            profitLoss={data.profitLoss}
+            closingBalance={data.closingBalance}
+            dailyRows={data.dailyRows}
+            paymentModeShares={data.paymentModeShares}
+            topExpenseCategories={data.topExpenseCategories}
+          />
+        )}
       </div>
     </SharedAppLayout>
   );
 }
 
+export default function ShopMonthSummaryPage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading month summary...</div>}>
+      <ShopMonthSummaryContent />
+    </Suspense>
+  );
+}

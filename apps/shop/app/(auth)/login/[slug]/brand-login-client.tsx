@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useActionState, useState, Suspense } from 'react';
+import React, { useState, Suspense } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
-import { loginAction } from '../actions';
+import { useSearchParams, useRouter } from 'next/navigation';
+import { loginWithCredentials } from '@/lib/api/auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -16,6 +16,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import type { PublicBrandLoginData } from '@/lib/theme/types';
+import { PoweredByFooter } from '@/components/shared/powered-by-footer';
 
 export interface DemoQuickAccount {
   email: string;
@@ -80,12 +81,14 @@ function BrandLoginInner({
   primaryFg: string;
 }) {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const redirectParam = searchParams.get('redirect') || '';
   const errorParam = searchParams.get('error');
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [state, formAction, isPending] = useActionState(loginAction, null);
+  const [isPending, setIsPending] = useState(false);
+  const [customError, setCustomError] = useState<string | null>(null);
 
   const brandName = brandLogin.display_name || brandLogin.brand_name;
   const isDarkDefault = brandLogin.default_mode === 'dark';
@@ -95,10 +98,36 @@ function BrandLoginInner({
       : brandLogin.logo_url;
 
   const errorMessage =
-    state?.error ||
+    customError ||
     (errorParam === 'inactive_account'
       ? 'Your account has been deactivated. Please contact your brand administrator.'
       : null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsPending(true);
+    setCustomError(null);
+
+    try {
+      const res = await loginWithCredentials(email, password, brandLogin.brand_id);
+      if (!res.success) {
+        setCustomError(res.error || 'Authentication failed. Please check your credentials.');
+        setIsPending(false);
+        return;
+      }
+
+      if (res.mustChangePassword) {
+        router.push('/change-password');
+        return;
+      }
+
+      const dest = redirectParam || '/shop/';
+      window.location.href = dest;
+    } catch (err: any) {
+      setCustomError(err?.message || 'Unexpected login error.');
+      setIsPending(false);
+    }
+  };
 
   const bgStyle: React.CSSProperties = brandLogin.login_bg_url
     ? {
@@ -122,7 +151,7 @@ function BrandLoginInner({
         color: 'var(--surface-text, #0f172a)',
       }}
     >
-      {/* Top logo & header (especially highlighted in centered layout or mobile split) */}
+      {/* Top logo & header */}
       <div
         className={
           brandLogin.login_layout === 'centered'
@@ -152,16 +181,13 @@ function BrandLoginInner({
         </div>
       </div>
 
-      <form action={formAction} className="space-y-4">
+      <form onSubmit={handleSubmit} className="space-y-4">
         {errorMessage && (
           <div className="flex items-center gap-2 rounded-[var(--radius-btn,0.5rem)] bg-red-50 p-3 text-xs text-red-700 border border-red-200">
             <AlertCircle className="h-4 w-4 shrink-0" />
             <span>{errorMessage}</span>
           </div>
         )}
-
-        <input type="hidden" name="redirect" value={redirectParam} />
-        <input type="hidden" name="expectedBrandId" value={brandLogin.brand_id} />
 
         <div className="space-y-1.5">
           <Label htmlFor="email" className="text-xs font-semibold">
@@ -227,6 +253,7 @@ function BrandLoginInner({
                   onClick={() => {
                     setEmail(acc.email);
                     setPassword('password123');
+                    setCustomError(null);
                   }}
                   className="text-[11px] font-medium bg-white hover:opacity-90 text-slate-800 border border-slate-200 rounded-[var(--radius-btn,0.375rem)] px-2.5 py-1 cursor-pointer transition-colors shadow-2xs"
                 >
@@ -261,10 +288,6 @@ function BrandLoginInner({
           </Link>
         </div>
       </form>
-
-      <div className="pt-3 border-t border-slate-100 text-center text-[11px] text-slate-400">
-        Powered by CafeLedger
-      </div>
     </div>
   );
 
@@ -321,16 +344,18 @@ function BrandLoginInner({
 
           <div className="text-xs opacity-75 flex items-center justify-between">
             <span>₹ INR • Asia/Kolkata</span>
-            <span>Powered by CafeLedger</span>
           </div>
         </div>
 
         {/* Right Sign-In Column */}
         <div
-          className="flex flex-col items-center justify-center p-4 sm:p-8"
+          className="flex flex-col items-center justify-between p-4 sm:p-8 min-h-screen"
           style={bgStyle}
         >
-          {formCard}
+          <div className="w-full flex-1 flex flex-col items-center justify-center">
+            {formCard}
+          </div>
+          <PoweredByFooter variant="brand" />
         </div>
       </div>
     );
@@ -339,10 +364,13 @@ function BrandLoginInner({
   // Centered Full-Bleed Mode
   return (
     <div
-      className="min-h-screen flex flex-col items-center justify-center p-4 sm:p-6"
+      className="min-h-screen flex flex-col items-center justify-between p-4 sm:p-6"
       style={bgStyle}
     >
-      {formCard}
+      <div className="w-full flex-1 flex flex-col items-center justify-center">
+        {formCard}
+      </div>
+      <PoweredByFooter variant="brand" />
     </div>
   );
 }
@@ -365,4 +393,3 @@ export function BrandLoginClient(props: {
     </Suspense>
   );
 }
-

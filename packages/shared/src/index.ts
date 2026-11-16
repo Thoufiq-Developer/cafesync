@@ -25,6 +25,7 @@ export * from './components/shared/report-preview-modal';
 export * from './components/shared/screen-help-tour';
 export * from './components/shared/stat-card';
 export * from './components/shared/items-manager';
+export * from './components/shared/powered-by-footer';
 
 // Libs
 export * from './lib/utils';
@@ -36,12 +37,10 @@ export * from './lib/demo-master-data';
 export * from './lib/demo-shop-data';
 export * from './lib/master-constants';
 
-// Supabase (client, server, config, types, middleware)
+// Supabase (client, config, types)
 export { createClient as createBrowserClient } from './lib/supabase/client';
-export { createClient as createServerClient } from './lib/supabase/server';
 export * from './lib/supabase/config';
 export * from './lib/supabase/types';
-export * from './lib/supabase/middleware';
 
 // Theme
 export * from './lib/theme';

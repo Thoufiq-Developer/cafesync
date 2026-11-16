@@ -56,6 +56,8 @@ export const DEMO_BRAND_CHAI = {
   gstin: '07AAACC9988C1Z4',
 };
 
+export const DEMO_BRANDS = [DEMO_BRAND, DEMO_BRAND_ROAST, DEMO_BRAND_CHAI];
+
 export const DEMO_USERS: Record<string, DemoUser> = {
   'master@cafeledger.io': {
     id: '00000000-0000-0000-0000-000000000001',

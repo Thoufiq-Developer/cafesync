@@ -1,0 +1,4 @@
+/master/brands/*/theme  /master/brands/_placeholder/theme/  200
+/master/brands/*        /master/brands/_placeholder/        200
+/login/*                /login/_placeholder/               200
+

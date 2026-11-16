@@ -26,6 +26,7 @@ import { BrandAvatarOrLogo } from './sidebar';
 import { ActivityDrawer } from './activity-drawer';
 import { ScreenHelpTour } from './screen-help-tour';
 import { UserRole } from '@/lib/supabase/types';
+import { cn } from '@/lib/utils';
 
 export interface HeaderUser {
   id?: string;
@@ -85,8 +86,9 @@ export function SharedHeader({
       style={
         isMaster
           ? {
-              backgroundColor: 'rgba(255,255,255,0.95)',
-              borderColor: '#e2e8f0',
+              backgroundColor: 'rgba(53, 32, 26, 0.95)',
+              borderColor: '#4A2F25',
+              color: '#F7E5BC',
             }
           : {
               backgroundColor: 'var(--surface-card, #ffffff)',
@@ -100,7 +102,7 @@ export function SharedHeader({
         <Button
           variant="ghost"
           size="icon"
-          className="md:hidden shrink-0 h-9 w-9"
+          className={cn("md:hidden shrink-0 h-9 w-9", isMaster && "text-[#F7E5BC] hover:bg-[#35201A]")}
           onClick={onMobileMenuToggle}
           aria-label="Open navigation menu"
         >
@@ -109,9 +111,11 @@ export function SharedHeader({
 
         <div className="flex items-center gap-2.5 min-w-0">
           {isMaster ? (
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-900 text-white font-bold shadow-xs shrink-0">
-              C
-            </div>
+            <img
+              src="/brand/cafesync-icon-192.png"
+              alt="CafeSync Master"
+              className="h-9 w-9 object-contain rounded-md shadow-xs shrink-0"
+            />
           ) : (
             <BrandAvatarOrLogo
               src={logoSrc}
@@ -124,16 +128,21 @@ export function SharedHeader({
 
           <div className="min-w-0">
             <div className="flex items-center gap-1.5 min-w-0">
-              <span className="font-bold tracking-tight text-sm sm:text-base truncate">
-                {user.role === 'manager' && user.shopName
-                  ? `${brandName} - ${user.shopName}`
-                  : brandName}
+              <span className={cn("font-bold tracking-tight text-sm sm:text-base truncate", isMaster && "text-[#F7E5BC]")}>
+                {isMaster
+                  ? 'CafeSync'
+                  : user.role === 'manager' && user.shopName
+                    ? `${brandName} - ${user.shopName}`
+                    : brandName}
               </span>
               <Badge
-                variant={roleBadgeMap[user.role]?.variant || 'default'}
-                className="text-[10px] px-1.5 py-0 shrink-0 hidden sm:inline-flex"
+                variant={isMaster ? 'default' : roleBadgeMap[user.role]?.variant || 'default'}
+                className={cn(
+                  "text-[10px] px-1.5 py-0 shrink-0 hidden sm:inline-flex",
+                  isMaster && "bg-[#B46D31] text-[#F7E5BC] hover:bg-[#B46D31] border-transparent font-medium"
+                )}
               >
-                {roleBadgeMap[user.role]?.label || user.role}
+                {isMaster ? 'Master' : roleBadgeMap[user.role]?.label || user.role}
               </Badge>
             </div>
 
@@ -164,9 +173,12 @@ export function SharedHeader({
             onClick={() => setActivityOpen(true)}
             title="Activity notifications"
             aria-label="Open recent activity"
-            className="relative h-9 w-9 shrink-0"
+            className={cn(
+              "relative h-9 w-9 shrink-0",
+              isMaster && "border-[#4A2F25] bg-[#35201A] text-[#F7E5BC] hover:bg-[#432920] hover:text-[#EBAB51]"
+            )}
           >
-            <Bell className="h-4 w-4 text-slate-700" />
+            <Bell className={cn("h-4 w-4", isMaster ? "text-[#F7E5BC]" : "text-slate-700")} />
             {unreadCount > 0 && (
               <span
                 className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-rose-600 ring-2 ring-white"
@@ -197,7 +209,14 @@ export function SharedHeader({
           </Button>
         )}
 
-        <span className="hidden lg:inline-flex items-center text-xs font-medium text-slate-500 bg-slate-100 px-2.5 py-1 rounded-[var(--radius-btn,0.375rem)]">
+        <span
+          className={cn(
+            "hidden lg:inline-flex items-center text-xs font-medium px-2.5 py-1 rounded-[var(--radius-btn,0.375rem)]",
+            isMaster
+              ? "text-[#B9A58A] bg-[#28150E] border border-[#4A2F25]"
+              : "text-slate-500 bg-slate-100"
+          )}
+        >
           ₹ INR | IST
         </span>
 
@@ -206,15 +225,23 @@ export function SharedHeader({
             <Button
               variant="outline"
               size="sm"
-              className="flex items-center gap-1.5 border-slate-200 pl-2 pr-2.5 py-1 h-9 rounded-full shrink-0"
+              className={cn(
+                "flex items-center gap-1.5 border-slate-200 pl-2 pr-2.5 py-1 h-9 rounded-full shrink-0",
+                isMaster && "border-[#4A2F25] bg-[#35201A] text-[#F7E5BC] hover:bg-[#432920]"
+              )}
             >
-              <div className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 text-slate-700">
+              <div
+                className={cn(
+                  "flex h-6 w-6 items-center justify-center rounded-full text-slate-700",
+                  isMaster ? "bg-[#28150E] text-[#C68846]" : "bg-slate-100"
+                )}
+              >
                 <User className="h-3.5 w-3.5" />
               </div>
               <span className="hidden sm:inline text-xs font-medium max-w-[110px] truncate">
                 {user.fullName}
               </span>
-              <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+              <ChevronDown className={cn("h-3.5 w-3.5", isMaster ? "text-[#B9A58A]" : "text-slate-400")} />
             </Button>
           </DropdownMenuTrigger>
 

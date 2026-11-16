@@ -166,22 +166,24 @@ export function SharedSidebar({
 
   const iconSrc = isMaster ? null : settings?.icon_url || logoSrc;
 
-  // Render Master's completely neutral un-themed sidebar
+  // Render Master's CafeSync branded dark sidebar
   if (isMaster) {
     const masterNavContent = (
-      <div className="flex flex-col h-full bg-white border-r border-slate-200">
-        <div className="flex h-16 items-center justify-between px-4 border-b border-slate-200">
+      <div className="flex flex-col h-full bg-[#28150E] border-r border-[#4A2F25] text-[#F7E5BC]">
+        <div className="flex h-16 items-center justify-between px-4 border-b border-[#4A2F25] bg-[#28150E]">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-900 text-white font-bold text-sm shrink-0">
-              C
-            </div>
+            <img
+              src="/brand/cafesync-icon-192.png"
+              alt="CafeSync"
+              className="h-10 w-10 min-w-[2.5rem] object-contain rounded-md shrink-0 shadow-xs"
+            />
             {!isCollapsed && (
-              <div className="min-w-0">
-                <span className="font-bold text-slate-900 tracking-tight text-base block truncate">
-                  CafeLedger
+              <div className="min-w-0 leading-tight">
+                <span className="font-bold text-[#F7E5BC] tracking-tight text-base block truncate">
+                  CafeSync
                 </span>
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 block">
-                  Platform Master
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-[#B46D31] block">
+                  Master
                 </span>
               </div>
             )}
@@ -192,7 +194,7 @@ export function SharedSidebar({
               <Button
                 variant="ghost"
                 size="icon"
-                className="hidden md:inline-flex h-8 w-8 text-slate-400 hover:text-slate-900"
+                className="hidden md:inline-flex h-8 w-8 text-[#B9A58A] hover:text-[#F7E5BC] hover:bg-[#35201A]"
                 onClick={onToggleCollapse}
                 title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
               >
@@ -206,7 +208,7 @@ export function SharedSidebar({
             <Button
               variant="ghost"
               size="icon"
-              className="md:hidden"
+              className="md:hidden text-[#B9A58A] hover:text-[#F7E5BC] hover:bg-[#35201A]"
               onClick={onCloseMobile}
             >
               <X className="h-5 w-5" />
@@ -216,7 +218,7 @@ export function SharedSidebar({
 
         <div className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
           {!isCollapsed && (
-            <div className="px-3 mb-2 text-[11px] font-semibold tracking-wider text-slate-400 uppercase">
+            <div className="px-3 mb-2 text-[11px] font-semibold tracking-wider text-[#B9A58A] uppercase">
               Platform Management
             </div>
           )}
@@ -238,8 +240,8 @@ export function SharedSidebar({
                   'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors select-none',
                   isCollapsed && 'justify-center px-2',
                   isActive
-                    ? 'bg-slate-900 text-white font-semibold shadow-xs'
-                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                    ? 'bg-[#C68846] text-[#28150E] font-semibold shadow-xs'
+                    : 'text-[#F7E5BC] hover:bg-[#35201A] hover:text-[#EBAB51]'
                 )}
               >
                 <Icon className="h-4 w-4 shrink-0" />
@@ -249,21 +251,21 @@ export function SharedSidebar({
           })}
         </div>
 
-        <div className="p-3 border-t border-slate-200 bg-slate-50/50 space-y-2">
+        <div className="p-3 border-t border-[#4A2F25] bg-[#35201A]/60 space-y-2">
           <a
             href="/api/auth/logout"
             className={cn(
-              'flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold text-rose-600 hover:bg-rose-50 hover:text-rose-700 transition-colors cursor-pointer',
+              'flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold text-rose-400 hover:bg-rose-950/40 hover:text-rose-300 transition-colors cursor-pointer',
               isCollapsed && 'justify-center px-2'
             )}
             title="Sign Out"
           >
-            <LogOut className="h-4 w-4 shrink-0 text-rose-500" />
+            <LogOut className="h-4 w-4 shrink-0 text-rose-400" />
             {!isCollapsed && <span>Sign Out</span>}
           </a>
           {!isCollapsed && (
-            <div className="flex items-center justify-between text-[11px] text-slate-400 px-2 py-0.5">
-              <span>CafeLedger Platform</span>
+            <div className="flex items-center justify-between text-[11px] text-[#B9A58A] px-2 py-0.5">
+              <span>CafeSync Master</span>
               <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" title="Online" />
             </div>
           )}
@@ -454,7 +456,7 @@ export function SharedSidebar({
             className="flex items-center justify-between text-[10px] px-2 py-0.5"
             style={{ color: 'var(--sidebar-muted-text, #64748b)' }}
           >
-            <span>Powered by CafeLedger</span>
+            <span>{brandName}</span>
             <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" title="Online" />
           </div>
         )}

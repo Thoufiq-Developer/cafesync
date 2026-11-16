@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { BrandProvider, BrandTheme, useBrandTheme } from './brand-provider';
 import { SharedHeader, HeaderUser } from './header';
 import { BrandAvatarOrLogo, SharedSidebar } from './sidebar';
+import { PoweredByFooter } from './powered-by-footer';
 import { ShopMobileNav } from '@/components/shop/shop-mobile-nav';
 import { createClient } from '@/lib/supabase/client';
 import { cn } from '@/lib/utils';
@@ -95,7 +96,7 @@ export function SharedAppLayout({ user, brand, children }: SharedLayoutProps) {
       <div
         className={cn(
           'min-h-screen flex flex-col antialiased',
-          isMaster ? 'bg-slate-50' : 'bg-[var(--surface-bg,#f8fafc)]'
+          isMaster ? 'bg-[#28150E] text-[#F7E5BC]' : 'bg-[var(--surface-bg,#f8fafc)]'
         )}
       >
         <SharedSidebar
@@ -120,25 +121,17 @@ export function SharedAppLayout({ user, brand, children }: SharedLayoutProps) {
 
           <main
             className={cn(
-              'flex-1 p-3 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto min-w-0',
-              user.role === 'manager' && 'pb-24 md:pb-8'
+              'flex-1 p-3 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto min-w-0'
             )}
           >
             {!isMaster && <BrandWelcomeBanner user={user} />}
             {children}
           </main>
 
-          {!isMaster && (
-            <footer
-              className={cn(
-                'px-4 sm:px-6 lg:px-8 pt-1 max-w-7xl w-full mx-auto flex items-center justify-between text-[11px] text-slate-400',
-                user.role === 'manager' ? 'pb-24 md:pb-4' : 'pb-4'
-              )}
-            >
-              <span>Powered by CafeLedger</span>
-              <span>₹ INR • Asia/Kolkata</span>
-            </footer>
-          )}
+          <PoweredByFooter
+            variant={isMaster ? 'master' : 'brand'}
+            role={user.role}
+          />
         </div>
 
         {user.role === 'manager' && <ShopMobileNav />}

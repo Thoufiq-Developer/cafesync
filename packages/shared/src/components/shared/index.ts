@@ -6,3 +6,4 @@ export * from './date-range-picker';
 export * from './stat-card';
 export * from './layout-wrapper';
 export * from './format-values';
+export * from './powered-by-footer';

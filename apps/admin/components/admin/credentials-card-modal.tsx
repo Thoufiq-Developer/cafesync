@@ -79,23 +79,24 @@ export function CredentialsCardModal({
   const handleDownloadPdf = async () => {
     setIsDownloading(true);
     try {
-      const res = await fetch('/api/reports/credentials-pdf', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          shopName: credentials.shopName,
-          shopCode: credentials.shopCode || 'SHOP',
-          managerName: credentials.managerName,
-          loginUrl: fullLoginUrl,
-          username: credentials.username,
-          temporaryPassword: credentials.password,
-        }),
+      const { generateSingleCredentialPdf } = await import('@cafesync/shared');
+      const buf = await generateSingleCredentialPdf({
+        brand: {
+          name: credentials.shopName,
+          primaryColor: '#ea580c',
+          secondaryColor: '#9a3412',
+          slug: 'brand',
+          generatedAt: new Date().toLocaleDateString(),
+        },
+        shopName: credentials.shopName,
+        shopCode: credentials.shopCode || 'SHOP',
+        managerName: credentials.managerName,
+        username: credentials.username,
+        temporaryPassword: credentials.password,
+        loginUrl: fullLoginUrl,
       });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err?.error || 'Could not generate credentials PDF');
-      }
-      const blob = await res.blob();
+
+      const blob = new Blob([buf as any], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;

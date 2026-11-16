@@ -1,5 +1,3 @@
-'use server';
-
 export async function saveShopItemAction(..._args: any[]): Promise<{ success: boolean; item?: any; error?: string }> {
   return { success: false, error: 'Not supported in admin app' };
 }

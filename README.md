@@ -98,7 +98,7 @@ All tables include automatic `created_at` and `updated_at` timestamps.
 2. `admin` can only access records matching their `brand_id`.
 3. `manager` can only access records matching their assigned `shop_id`.
 4. Client input for `brand_id` and `shop_id` is **never trusted**; both are derived server-side via `public.auth_role()`, `public.auth_brand_id()`, and `public.auth_shop_id()`.
-5. Privileged work (creating auth users, password resets) runs exclusively via `createAdminClient()` with `SUPABASE_SERVICE_ROLE_KEY` on the server (`import 'server-only'`).
+5. Privileged work (creating auth users, password resets, shop & brand deletions, user recreation) runs exclusively via Supabase Edge Functions with `SUPABASE_SERVICE_ROLE_KEY` held securely in Supabase Secrets. The Next.js apps never hold or require the service role key.
 
 ---
 
@@ -135,15 +135,74 @@ All tables include automatic `created_at` and `updated_at` timestamps.
 ## 🚀 Getting Started
 
 ### 1. Environment Setup
-Copy the example environment file:
+Copy the example environment files in each app (`apps/master/.env.example`, `apps/admin/.env.example`, `apps/shop/.env.example`):
 ```bash
+# In each app directory:
 cp .env.example .env.local
 ```
-Fill in your Supabase project URL, Anon Key, and Service Role Key:
+Fill in your public Supabase project URL, Anon Key, and cross-app URLs:
 ```env
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-server-only
+
+NEXT_PUBLIC_MASTER_APP_URL=http://localhost:3000
+NEXT_PUBLIC_ADMIN_APP_URL=http://localhost:3001
+NEXT_PUBLIC_SHOP_APP_URL=http://localhost:3002
+```
+> **Security Notice:** The Next.js apps (`apps/master`, `apps/admin`, `apps/shop`) never require or use `SUPABASE_SERVICE_ROLE_KEY`. All privileged operations run securely in Supabase Edge Functions.
+
+---
+
+## ⚡ Supabase Edge Functions Architecture
+
+All privileged administrative workflows that require service role access are decoupled into standalone Supabase Edge Functions located in `supabase/functions/`:
+
+1. **`create-shop-with-manager`**: Provisions a new shop and its primary manager auth user.
+2. **`create-manager-user`**: Provisions an additional manager auth user for an assigned shop.
+3. **`reset-manager-password`**: Generates a secure temporary password and sets `must_change_password=true`.
+4. **`delete-shop`**: Validates transaction history (refuses deletion if transactions > 0), cascades DB shop records, and purges manager auth accounts.
+5. **`create-brand-admin`**: Provisions a brand administrator auth user (Platform Master access only).
+6. **`delete-brand`**: Cascades all brand DB entities, purges brand auth accounts, and cleans storage files in `brand-assets` (Platform Master access only).
+7. **`recreate-users`**: Batch recreates auth logins from backup manifests during Restore operations (Platform Master access only).
+8. **`delete-auth-users`**: Purges auth accounts and cleans brand storage files during Remove Data actions.
+
+### Edge Function Security Principles
+- **JWT Verification**: Every function validates the caller's Supabase JWT via `_shared/auth.ts`.
+- **Role & Tenancy Enforcement**: Brand Admins can only act on resources within their assigned `brand_id`. Shop Managers are strictly rejected from all edge functions.
+- **CORS Protection**: Enforces origin checks against the configured `ALLOWED_ORIGINS` secret and handles HTTP OPTIONS preflights.
+- **Audit Logging**: Every action writes an entry to `public.audit_log` with passwords sanitized.
+- **Zero Client Service Key**: `SUPABASE_SERVICE_ROLE_KEY` is accessible only within the Supabase Edge runtime via `Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')`.
+
+### Deploying Edge Functions to Supabase
+```bash
+# Set Edge Function secrets
+supabase secrets set ALLOWED_ORIGINS="http://localhost:3000,http://localhost:3001,http://localhost:3002,https://master.cafesync.app,https://admin.cafesync.app,https://shop.cafesync.app"
+
+# Deploy all functions
+supabase functions deploy create-shop-with-manager
+supabase functions deploy create-manager-user
+supabase functions deploy reset-manager-password
+supabase functions deploy delete-shop
+supabase functions deploy create-brand-admin
+supabase functions deploy delete-brand
+supabase functions deploy recreate-users
+supabase functions deploy delete-auth-users
+```
+
+### Local Testing with Supabase CLI
+```bash
+# 1. Start local Supabase containers (DB, Auth, Storage, Edge Runtime)
+supabase start
+
+# 2. Serve edge functions locally with environment secrets
+supabase functions serve --env-file ./supabase/.env.local
+
+# 3. Test a function directly via curl (example: reset-manager-password)
+curl -i --location --request POST 'http://127.0.0.1:54321/functions/v1/reset-manager-password' \
+  --header 'Authorization: Bearer <USER_JWT>' \
+  --header 'Origin: http://localhost:3001' \
+  --header 'Content-Type: application/json' \
+  --data '{"userId":"<TARGET_USER_ID>"}'
 ```
 
 ### 2. Apply Migrations to Supabase

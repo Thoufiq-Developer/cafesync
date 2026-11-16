@@ -6,7 +6,6 @@
 // ==============================================================================
 
 import React, { useState, useRef, useEffect } from 'react';
-import ExcelJS from 'exceljs';
 import {
   Archive,
   Download,
@@ -450,6 +449,7 @@ export function BackupView({
 
   const handleDownloadCredentialsExcel = async () => {
     if (recreatedCredentials.length === 0) return;
+    const ExcelJS = (await import('exceljs')).default;
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet('Manager Credentials');
     ws.addRow(['Role', 'Full Name', 'Username', 'Synthetic Email', 'Temporary Password', 'Login URL']);

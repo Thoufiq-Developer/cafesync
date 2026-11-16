@@ -224,7 +224,7 @@ export function StudioLivePreview({
                 </div>
 
                 <div className="pt-2 border-t text-[9px] text-center opacity-70" style={{ borderColor: 'var(--sidebar-border)' }}>
-                  Powered by CafeLedger
+                  {settings.display_name || 'CafeSync'}
                 </div>
               </aside>
 
@@ -383,7 +383,7 @@ export function StudioLivePreview({
 
                 <div className="pt-2 border-t text-[10px] flex justify-between opacity-65" style={{ borderColor: 'var(--surface-border)' }}>
                   <span>{settings.display_name} • Admin Console</span>
-                  <span>Powered by CafeLedger</span>
+                  <span>Powered by CafeSync · A product of DudeX Innovations</span>
                 </div>
               </div>
             </div>
@@ -526,7 +526,7 @@ export function StudioLivePreview({
                 </div>
 
                 <div className="px-3.5 py-2 border-t text-[10px] text-center opacity-60" style={{ borderColor: 'var(--surface-border)' }}>
-                  Powered by CafeLedger
+                  Powered by CafeSync · A product of DudeX Innovations
                 </div>
               </div>
             </div>
@@ -620,7 +620,7 @@ export function StudioLivePreview({
                         Sign In to {settings.display_name}
                       </button>
                     </div>
-                    <div className="text-[10px] text-center opacity-60 pt-1">Powered by CafeLedger</div>
+                    <div className="text-[10px] text-center opacity-60 pt-1">Powered by CafeSync · A product of DudeX Innovations</div>
                   </div>
                 </div>
               ) : (
@@ -672,7 +672,7 @@ export function StudioLivePreview({
                       Sign In
                     </button>
                   </div>
-                  <div className="text-[10px] text-center opacity-60">Powered by CafeLedger</div>
+                  <div className="text-[10px] text-center opacity-60">Powered by CafeSync · A product of DudeX Innovations</div>
                 </div>
               )}
             </div>

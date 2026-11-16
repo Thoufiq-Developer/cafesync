@@ -74,22 +74,22 @@ export function AdminSettingsView({ brand, shops }: AdminSettingsViewProps) {
     setIsBackupLoading(true);
     const toastId = toast.loading('Exporting complete brand backup archive (ZIP)...');
     try {
-      const response = await fetch('/api/admin/backup');
-      if (!response.ok) {
-        throw new Error('Failed to generate full backup');
-      }
+      const { exportBackup } = await import('@cafesync/shared/lib/backup/export');
+      const { supabase } = await import('@/lib/supabase/client');
 
-      const blob = await response.blob();
-      const downloadUrl = window.URL.createObjectURL(blob);
+      const result = await exportBackup(supabase, {
+        scope: 'brand',
+        brandId: brand.id,
+        includeLogos: true,
+        onProgress: (statusMsg) => {
+          toast.loading(statusMsg, { id: toastId });
+        },
+      });
+
+      const downloadUrl = window.URL.createObjectURL(result.blob);
       const a = document.createElement('a');
       a.href = downloadUrl;
-      const contentDisposition = response.headers.get('Content-Disposition');
-      let downloadFilename = `CafeSync-Backup_${brand.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.zip`;
-      if (contentDisposition) {
-        const match = contentDisposition.match(/filename="?([^"]+)"?/);
-        if (match && match[1]) downloadFilename = match[1];
-      }
-      a.download = downloadFilename;
+      a.download = result.filename;
       document.body.appendChild(a);
       a.click();
       a.remove();

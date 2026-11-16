@@ -1,128 +1,78 @@
+'use client';
+
 import React from 'react';
-import { getCurrentUserContext } from '@/lib/auth';
+import { useQuery } from '@tanstack/react-query';
+import { useAuth } from '@/lib/auth-context';
+import { supabase } from '@/lib/supabase/client';
 import { SharedAppLayout } from '@/components/shared/layout-wrapper';
 import { PlatformAuditView, AuditRecord } from '@/components/master/platform-audit-view';
-import { createClient } from '@/lib/supabase/server';
-import { isSupabaseConfigured } from '@/lib/supabase/config';
-import { DEMO_GLOBAL_AUDIT_LOGS, DemoMasterBrand } from '@/lib/demo-master-data';
-import { listDemoThemeBundles, readDemoThemeAudits } from '@/lib/theme/store';
+import { DEMO_GLOBAL_AUDIT_LOGS, DEMO_MASTER_BRANDS, DemoMasterBrand } from '@/lib/demo-master-data';
 import { formatActivityEntry, normalizeJsonPayload } from '@/lib/audit/format-activity';
-import { redirect } from 'next/navigation';
+import { Loader2 } from 'lucide-react';
 
-export const dynamic = 'force-dynamic';
+export default function MasterAuditPage() {
+  const { profile, isLive } = useAuth();
 
-export default async function MasterAuditPage() {
-  const user = await getCurrentUserContext();
-  if (!user || user.role !== 'master') {
-    redirect('/login');
-  }
-
-  let brands: DemoMasterBrand[] = [];
-  let logs: AuditRecord[] = [];
-
-  if (!isSupabaseConfigured()) {
-    brands = listDemoThemeBundles().map((b) => ({
-      id: b.brand.id,
-      name: b.brand.name,
-      slug: b.brand.slug,
-      registration_no: b.brand.registration_no,
-      logo_url: b.settings.logo_url,
-      primary_color: b.settings.primary_color,
-      secondary_color: b.settings.secondary_color,
-      address: b.brand.address || '',
-      phone: b.brand.phone || '',
-      email: b.brand.email || '',
-      gstin: b.brand.gstin,
-      status: b.brand.status,
-      created_at: '',
-      shops_count: 0,
-      admins_count: 0,
-      monthly_volume: 0,
-      admins: [],
-    }));
-
-    const demoThemeLogs: AuditRecord[] = readDemoThemeAudits().map((a) => {
-      const formatted = formatActivityEntry(
-        {
-          id: a.id,
-          action: a.action,
-          table_name: a.table_name,
-          record_id: a.brand_id,
-          new_data: { details: a.details, brand_name: a.brand_name },
-          at: a.at,
-          user_name: a.user_name,
-          user_role: 'master',
-          brand_id: a.brand_id,
-          brand_name: a.brand_name,
-        },
-        'master'
-      );
-      return {
-        id: a.id,
-        brand_id: a.brand_id,
-        brand_name: a.brand_name,
-        user_name: formatted.actorName,
-        user_role: 'master',
-        action: a.action,
-        table_name: a.table_name,
-        record_id: a.brand_id,
-        new_data: { details: a.details },
-        summary: formatted.summary,
-        timestamp: new Date(a.at).toLocaleString('en-IN', {
-          dateStyle: 'short',
-          timeStyle: 'medium',
-        }),
-      };
-    });
-
-    logs = [
-      ...demoThemeLogs,
-      ...DEMO_GLOBAL_AUDIT_LOGS.map((g) => {
-        const formatted = formatActivityEntry(
-          {
+  const { data, isLoading } = useQuery({
+    queryKey: ['master-audit-logs', isLive],
+    queryFn: async () => {
+      if (!isLive) {
+        const logs: AuditRecord[] = DEMO_GLOBAL_AUDIT_LOGS.map((g) => {
+          const formatted = formatActivityEntry(
+            {
+              id: g.id,
+              action: g.action,
+              table_name: g.table_name,
+              record_id: g.record_id,
+              new_data: { details: g.details },
+              at: new Date().toISOString(),
+              user_name: g.user_name,
+              user_role: g.user_role,
+              brand_name: g.brand_name,
+            },
+            'master'
+          );
+          return {
             id: g.id,
+            brand_name: g.brand_name,
+            user_name: formatted.actorName,
+            user_role: g.user_role,
             action: g.action,
             table_name: g.table_name,
             record_id: g.record_id,
             new_data: { details: g.details },
-            at: new Date().toISOString(),
-            user_name: g.user_name,
-            user_role: g.user_role,
-            brand_name: g.brand_name,
-          },
-          'master'
-        );
+            summary: formatted.summary,
+            timestamp: new Date().toLocaleString('en-IN', {
+              dateStyle: 'short',
+              timeStyle: 'medium',
+            }),
+          };
+        });
+
         return {
-          id: g.id,
-          brand_name: g.brand_name,
-          user_name: formatted.actorName,
-          user_role: g.user_role,
-          action: g.action,
-          table_name: g.table_name,
-          record_id: g.record_id,
-          new_data: { details: g.details },
-          summary: formatted.summary,
-          timestamp: g.timestamp,
+          brands: DEMO_MASTER_BRANDS,
+          logs,
         };
-      }),
-    ];
-  } else {
-    try {
-      const supabase = (await createClient()) as any;
+      }
+
       const [{ data: dbBrands }, { data: dbLogs, error: logsErr }] = await Promise.all([
-        supabase
+        (supabase as any)
           .from('brands')
           .select('id, name, slug')
           .order('name', { ascending: true }),
-        supabase
+        (supabase as any)
           .from('audit_log')
           .select('*')
-          .order('at', { ascending: false })
+          .order('created_at', { ascending: false })
           .limit(100),
       ]);
 
+      if (logsErr) {
+        console.error('Master audit_log query failed:', logsErr);
+      }
+
       const brandMap = new Map<string, string>();
-      brands = (dbBrands || []).map((b: any) => {
+      const brands: DemoMasterBrand[] = (dbBrands || []).map((b: any) => {
         brandMap.set(b.id, b.name);
         return {
           id: b.id,
@@ -145,16 +95,14 @@ export default async function MasterAuditPage() {
         };
       });
 
-      if (logsErr) {
-        console.error('Master audit_log query failed:', logsErr);
-      }
+      let logs: AuditRecord[] = [];
 
       if (dbLogs && dbLogs.length > 0) {
         const userIds = Array.from(new Set(dbLogs.map((l: any) => l.user_id).filter(Boolean)));
         const profileMap = new Map<string, any>();
 
         if (userIds.length > 0) {
-          const { data: logProfiles } = await supabase
+          const { data: logProfiles } = await (supabase as any)
             .from('profiles')
             .select('id, full_name, role, brand_id')
             .in('id', userIds);
@@ -167,6 +115,7 @@ export default async function MasterAuditPage() {
           const oldObj = normalizeJsonPayload(l.old_data);
           const newObj = normalizeJsonPayload(l.new_data);
           const inferredBrandId =
+            l.brand_id ||
             prof?.brand_id ||
             newObj?.brand_id ||
             (l.table_name === 'brands' || l.table_name === 'brand_settings' ? l.record_id : null);
@@ -180,11 +129,11 @@ export default async function MasterAuditPage() {
               action: l.action,
               table_name: l.table_name,
               record_id: l.record_id,
-              old_data: oldObj,
-              new_data: newObj,
-              at: l.at,
-              user_name: prof?.full_name || null,
-              user_role: prof?.role || null,
+              old_data: l.old_data,
+              new_data: l.new_data,
+              at: l.created_at || l.at || new Date().toISOString(),
+              user_name: prof?.full_name || l.user_name || undefined,
+              user_role: prof?.role || l.user_role || undefined,
               brand_id: inferredBrandId,
               brand_name: inferredBrandName,
             },
@@ -200,31 +149,45 @@ export default async function MasterAuditPage() {
             action: l.action,
             table_name: l.table_name,
             record_id: l.record_id,
-            old_data: oldObj,
-            new_data: newObj,
+            old_data: l.old_data,
+            new_data: l.new_data,
             summary: formatted.summary,
-            timestamp: new Date(l.at).toLocaleString('en-IN', {
+            timestamp: new Date(l.created_at || l.at || Date.now()).toLocaleString('en-IN', {
               dateStyle: 'short',
               timeStyle: 'medium',
             }),
           };
         });
       }
-    } catch (err) {
-      console.error('Master audit page error:', err);
-    }
-  }
+
+      return {
+        brands,
+        logs,
+      };
+    },
+  });
 
   const masterUser = {
-    fullName: user.fullName || 'Platform Master',
-    email: user.email || '',
-    phone: user.phone,
+    id: profile?.id,
+    fullName: profile?.full_name || 'Platform Master',
+    email: profile?.email || '',
+    phone: profile?.phone || '',
     role: 'master' as const,
   };
 
   return (
     <SharedAppLayout user={masterUser}>
-      <PlatformAuditView initialLogs={logs} brands={brands} />
+      {isLoading || !data ? (
+        <div className="py-20 flex flex-col items-center justify-center gap-3 text-[#B9A58A] text-xs">
+          <Loader2 className="h-8 w-8 animate-spin text-[#C68846]" />
+          <span>Loading cross-tenant immutable audit log...</span>
+        </div>
+      ) : (
+        <PlatformAuditView
+          brands={data.brands}
+          initialLogs={data.logs}
+        />
+      )}
     </SharedAppLayout>
   );
 }

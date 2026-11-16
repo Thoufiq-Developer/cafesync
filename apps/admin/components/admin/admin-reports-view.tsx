@@ -19,6 +19,17 @@ import {
   ItemWiseSummaryView,
 } from '@/components/shared/item-wise-summary-view';
 import { ReportPreviewModal } from '@/components/shared/report-preview-modal';
+import { useAuth } from '@/lib/auth-context';
+import {
+  buildClientReportData,
+  buildClientBrandConsolidatedReport,
+} from '@/lib/reports/client-builder';
+import {
+  exportReportExcel,
+  exportReportPdf,
+  exportBrandConsolidatedExcel,
+  exportBrandConsolidatedPdf,
+} from '@/lib/reports/client-exporter';
 
 interface AdminReportsViewProps {
   shops: DemoShop[];
@@ -53,6 +64,9 @@ const REPORT_TYPE_OPTIONS: Array<{
 ];
 
 export function AdminReportsView({ shops, currentMonth }: AdminReportsViewProps) {
+  const { profile, brand } = useAuth();
+  const brandId = profile?.brand_id || brand?.id || '';
+
   const [selectedReport, setSelectedReport] =
     useState<ReportKindOption>('daily_summary');
   const [selectedShop, setSelectedShop] = useState('all');
@@ -82,72 +96,40 @@ export function AdminReportsView({ shops, currentMonth }: AdminReportsViewProps)
   const activeEnd =
     periodMode === 'month' ? getMonthBounds(selectedMonth).end : endDate;
 
-  const buildDownloadUrl = (format: 'excel' | 'pdf') => {
-    if (selectedReport === 'item_wise') {
-      const sp = new URLSearchParams({
-        action: format,
-        shopId: selectedShop,
-        startDate: activeStart,
-        endDate: activeEnd,
-        kind: itemFilters.kind,
-      });
-      if (itemFilters.category) sp.set('category', itemFilters.category);
-      if (itemFilters.search) sp.set('search', itemFilters.search);
-      if (format === 'pdf') {
-        sp.set('includeDetails', String(includeItemDetails));
-      }
-      return `/api/reports/item-wise?${sp.toString()}`;
-    }
-
-    if (selectedShop === 'all') {
-      const endpoint =
-        format === 'excel' ? '/api/reports/brand-excel' : '/api/reports/brand-pdf';
-      const sp = new URLSearchParams({
-        shopId: 'all',
-        startDate: activeStart,
-        endDate: activeEnd,
-        month: selectedMonth,
-        reportType: selectedReport,
-        includeDetails: String(includeItemDetails),
-      });
-      return `${endpoint}?${sp.toString()}`;
-    }
-
-    const endpoint = format === 'excel' ? '/api/reports/excel' : '/api/reports/pdf';
-    const sp = new URLSearchParams({
-      shopId: selectedShop,
-      startDate: activeStart,
-      endDate: activeEnd,
-      month: selectedMonth,
-      reportType: selectedReport,
-      includeDetails: String(includeItemDetails),
-    });
-    return `${endpoint}?${sp.toString()}`;
-  };
-
   const handleDownloadExcel = async () => {
     setIsExcelLoading(true);
     const toastId = toast.loading('Generating Excel report...');
     try {
-      const url = buildDownloadUrl('excel');
-      const response = await fetch(url);
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        throw new Error(err.error || 'Failed to generate Excel statement');
+      if (selectedShop === 'all') {
+        const bundle = await buildClientBrandConsolidatedReport({
+          brandId,
+          shopId: 'all',
+          startDate: activeStart,
+          endDate: activeEnd,
+          month: selectedMonth,
+          reportType: selectedReport,
+          includeItemDetails,
+        });
+        if (!bundle) throw new Error('Failed to generate consolidated report');
+        const filename = `CafeLedger_${selectedReport}_AllShops_${activeStart}_${activeEnd}.xlsx`;
+        await exportBrandConsolidatedExcel(bundle, filename);
+      } else {
+        const reportData = await buildClientReportData({
+          brandId,
+          shopId: selectedShop,
+          startDate: activeStart,
+          endDate: activeEnd,
+          month: selectedMonth,
+          reportType: selectedReport,
+          includeItemDetails,
+          itemKindFilter: itemFilters.kind,
+          itemCategoryFilter: itemFilters.category,
+          itemSearchFilter: itemFilters.search,
+        });
+        if (!reportData) throw new Error('Failed to generate shop report');
+        const filename = `CafeLedger_${selectedReport}_${selectedShop}_${activeStart}_${activeEnd}.xlsx`;
+        await exportReportExcel(reportData, filename);
       }
-
-      const blob = await response.blob();
-      const downloadUrl = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = downloadUrl;
-      a.download =
-        selectedShop === 'all'
-          ? `CafeLedger_${selectedReport}_AllShops_${activeStart}_${activeEnd}.xlsx`
-          : `CafeLedger_${selectedReport}_${selectedShop}_${activeStart}_${activeEnd}.xlsx`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      window.URL.revokeObjectURL(downloadUrl);
 
       toast.success('Excel workbook downloaded successfully', { id: toastId });
     } catch (err: any) {
@@ -161,25 +143,36 @@ export function AdminReportsView({ shops, currentMonth }: AdminReportsViewProps)
     setIsPdfLoading(true);
     const toastId = toast.loading('Generating branded A4 PDF report...');
     try {
-      const url = buildDownloadUrl('pdf');
-      const response = await fetch(url);
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        throw new Error(err.error || 'Failed to generate PDF statement');
+      if (selectedShop === 'all') {
+        const bundle = await buildClientBrandConsolidatedReport({
+          brandId,
+          shopId: 'all',
+          startDate: activeStart,
+          endDate: activeEnd,
+          month: selectedMonth,
+          reportType: selectedReport,
+          includeItemDetails,
+        });
+        if (!bundle) throw new Error('Failed to generate consolidated PDF');
+        const filename = `CafeLedger_${selectedReport}_AllShops_${activeStart}_${activeEnd}.pdf`;
+        await exportBrandConsolidatedPdf(bundle, filename);
+      } else {
+        const reportData = await buildClientReportData({
+          brandId,
+          shopId: selectedShop,
+          startDate: activeStart,
+          endDate: activeEnd,
+          month: selectedMonth,
+          reportType: selectedReport,
+          includeItemDetails,
+          itemKindFilter: itemFilters.kind,
+          itemCategoryFilter: itemFilters.category,
+          itemSearchFilter: itemFilters.search,
+        });
+        if (!reportData) throw new Error('Failed to generate shop PDF');
+        const filename = `CafeLedger_${selectedReport}_${selectedShop}_${activeStart}_${activeEnd}.pdf`;
+        await exportReportPdf(reportData, filename);
       }
-
-      const blob = await response.blob();
-      const downloadUrl = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = downloadUrl;
-      a.download =
-        selectedShop === 'all'
-          ? `CafeLedger_${selectedReport}_AllShops_${activeStart}_${activeEnd}.pdf`
-          : `CafeLedger_${selectedReport}_${selectedShop}_${activeStart}_${activeEnd}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      window.URL.revokeObjectURL(downloadUrl);
 
       toast.success('PDF statement downloaded successfully', { id: toastId });
     } catch (err: any) {
