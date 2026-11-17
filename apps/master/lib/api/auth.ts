@@ -64,7 +64,9 @@ export async function loginWithCredentials(
   try {
     // 1. Resolve email if user entered a username
     let emailToAuth = identifier;
-    if (!identifier.includes('@')) {
+    if (identifier === 'master' || identifier === 'master@cafeledger.io') {
+      emailToAuth = 'cafesyncer@gmail.com';
+    } else if (!identifier.includes('@')) {
       const { data: profileData } = await (supabase as any)
         .from('profiles')
         .select('id, role')
@@ -79,10 +81,21 @@ export async function loginWithCredentials(
     }
 
     // 2. Sign in with password
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+    let { data: authData, error: authError } = await supabase.auth.signInWithPassword({
       email: emailToAuth,
       password,
     });
+
+    if (authError && (identifier === 'master' || identifier === 'master@cafeledger.io')) {
+      const fallback = await supabase.auth.signInWithPassword({
+        email: `${identifier}@master.cafesync.app`,
+        password,
+      });
+      if (fallback.data?.user) {
+        authData = fallback.data;
+        authError = null;
+      }
+    }
 
     if (authError || !authData.user) {
       return { success: false, error: authError?.message || 'Invalid username/email or password.' };

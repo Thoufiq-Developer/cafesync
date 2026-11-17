@@ -1,6 +1,6 @@
-:HL["/_next/static/css/2703dd143ae6e57a.css","style"]
+:HL["/_next/static/css/e04cb627c62810f0.css","style"]
 :HL["/_next/static/css/5cf0168519415739.css","style"]
 :HL["/brand/cafesync-icon-192.png","image"]
 2:[["children",{"s":"__PAGE__","h":160}]]
 1:[["children",{"s":"master","h":100,"c":"$Q2"}]]
-0:{"b":"nTD5H2ZLNzUNGw98LZd21","t":{"t":{"s":"","h":88,"c":"$Q1"}}}
+0:{"b":"wwtKDl-m4VQYaQG8ly3TU","t":{"t":{"s":"","h":88,"c":"$Q1"}}}

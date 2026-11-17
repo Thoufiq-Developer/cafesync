@@ -48,7 +48,7 @@ export default function MasterDashboardPage() {
       ] = await Promise.all([
         (supabase as any)
           .from('brands')
-          .select('*, shops(id), profiles(id, full_name, username, email, phone, role, is_active), brand_settings(logo_url, primary_color, secondary_color)')
+          .select('*, shops(id), profiles(id, full_name, username, phone, role, is_active), brand_settings(logo_url, primary_color, secondary_color)')
           .order('created_at', { ascending: false }),
         (supabase as any)
           .from('daily_summary')

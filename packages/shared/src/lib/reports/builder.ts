@@ -1,6 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
 import { isSupabaseConfigured } from '@/lib/supabase/config';
-import { getCurrentUserContext } from '@/lib/auth';
 import { getBrandThemeById } from '@/lib/theme/server';
 import { DEMO_BRAND, DEMO_USERS } from '@/lib/demo-data';
 import { DEMO_ADMIN_SHOPS } from '@/lib/demo-admin-data';
@@ -31,12 +30,7 @@ export async function buildReportData(params: {
 }): Promise<ReportData | null> {
   if (!isSupabaseConfigured()) {
     let activeUserBrandId: string | null = null;
-    try {
-      const currentUser = await getCurrentUserContext();
-      activeUserBrandId = currentUser?.brandId || null;
-    } catch {
-      activeUserBrandId = null;
-    }
+    const currentUser: any = null;
 
     const demoUserMatch = Object.values(DEMO_USERS).find(
       (u) =>

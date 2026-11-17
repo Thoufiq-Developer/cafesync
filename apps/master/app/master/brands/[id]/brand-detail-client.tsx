@@ -64,7 +64,7 @@ export function BrandDetailClient() {
       ] = await Promise.all([
         (supabase as any)
           .from('brands')
-          .select('*, profiles(id, full_name, username, email, phone, role, is_active), brand_settings(logo_url, primary_color, secondary_color)')
+          .select('*, profiles(id, full_name, username, phone, role, is_active), brand_settings(logo_url, primary_color, secondary_color)')
           .eq('id', brandId)
           .maybeSingle(),
         (supabase as any)
