@@ -8,7 +8,7 @@ Single Supabase project and single Next.js project powering all three user panel
 
 ---
 
-## ☕ Key Specifications & Conventions
+## ☕ Key Specifications & Conventions..
 
 - **Currency:** Indian Rupee ₹ (`en-IN` numbering: thousands, Lakhs, Crores)
 - **Timezone:** `Asia/Kolkata` (IST)
